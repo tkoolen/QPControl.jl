@@ -1,4 +1,4 @@
-# immutable PDGains{T}
-#     k::T
-#     d::T
-# end
+immutable PDGains{T}
+    k::T
+    d::T
+end
