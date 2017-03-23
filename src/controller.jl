@@ -1,18 +1,14 @@
-isvalid(m::Maybe) = m.valid
-invalidate!(m::Maybe) = (m.valid = false; nothing)
-setdata!(m::Maybe, data) = (m.data .= data; m.valid = true; nothing)
-Base.get(m::Maybe) = (isvalid(m) || error("invalid"); m.data)
-
 type MomentumBasedController{T}
+    mechanism::Mechanism{T}
     num_basis_vectors_per_contact::Int64
     centroidalframe::CartesianFrame3D
     τ::Vector{T}
     result::DynamicsResult{T, T}
     momentummatrix::MomentumMatrix{Matrix{T}}
     desiredjointaccels::Dict{Joint{T}, Maybe{Vector{T}}}
-    desiredspatialaccels::Dict{Tuple{RigidBody{T}, RigidBody{T}}, Maybe{SpatialAcceleration{T}}}
-    paths::Dict{Tuple{RigidBody{T}, RigidBody{T}}, TreePath{RigidBody{T}, Joint{T}}}
-    jacobians::Dict{Tuple{RigidBody{T}, RigidBody{T}}, SpatialAcceleration{T}}
+    desiredspatialaccels::Dict{Pair{RigidBody{T}, RigidBody{T}}, Maybe{SpatialAcceleration{T}}}
+    paths::Dict{Pair{RigidBody{T}, RigidBody{T}}, TreePath{RigidBody{T}, Joint{T}}}
+    jacobians::Dict{Pair{RigidBody{T}, RigidBody{T}}, GeometricJacobian{Matrix{T}}}
     v̇weights::Vector{T}
     desiredmomentumrate::Wrench{T}
     momentumrateweight::SMatrix{6, 6, T, 36}
@@ -42,10 +38,13 @@ type MomentumBasedController{T}
             end
         end
         wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, nρ), Matrix{T}(3, nρ))
-        new(num_basis_vectors_per_contact, centroidalframe, τ, result, momentummatrix, desiredjointaccels, desiredspatialaccels, paths, jacobians, v̇weights,
+        new(mechanism, num_basis_vectors_per_contact, centroidalframe, τ, result, momentummatrix, desiredjointaccels, desiredspatialaccels, paths, jacobians, v̇weights,
             desiredmomentumrate, momentumrateweight, contactweights, wrenchmatrix, mass(mechanism))
     end
 end
+
+Base.eltype{T}(::Type{MomentumBasedController{T}}) = T
+Base.eltype{T}(controller::MomentumBasedController{T}) = eltype(typeof(controller))
 
 function clear_contacts!(controller::MomentumBasedController)
     for point in keys(controller.contactweights)
@@ -61,7 +60,26 @@ end
 
 function set_desired_accel!(controller::MomentumBasedController, joint::Joint, accel)
     nv = num_velocities(joint)
-    setdata!(get!(() -> Vector{eltype(accel)}(nv), controller.desiredjointaccels, joint), accel)
+    copydata!(get!(() -> Maybe(Vector{eltype(accel)}(nv)), controller.desiredjointaccels, joint), accel)
+    nothing
+end
+
+function set_desired_accel!(controller::MomentumBasedController, base::RigidBody, body::RigidBody, accel::SpatialAcceleration)
+    @boundscheck begin
+        @assert RigidBodyDynamics.is_fixed_to_body(body, accel.body)
+        @assert RigidBodyDynamics.is_fixed_to_body(base, accel.base)
+    end
+    pair = base => body
+    T = eltype(controller)
+    if !haskey(controller.paths, pair)
+        p = path(controller.mechanism, base, body)
+        controller.paths[pair] = p
+        nv = num_velocities(p)
+         # TODO: what if accel's frames are different but body and base are the same?
+        controller.jacobians[pair] = GeometricJacobian(default_frame(body), default_frame(base), default_frame(body), Matrix{T}(3, nv), Matrix{T}(3, nv))
+    end
+    maybe_accel = get!(Maybe{SpatialAcceleration{T}}, controller.desiredspatialaccels, pair)
+    setdata!(maybe_accel, accel)
     nothing
 end
 
@@ -73,15 +91,6 @@ end
 
 set_contact_weight(controller::MomentumBasedController, point::ContactPoint, weight::Number) = (controller.contactweights[point] = weight)
 set_joint_accel_weights(controller::MomentumBasedController, weight::Number) = (controller.v̇weights[:] = weight)
-
-function set_desired_accel!(controller::MomentumBasedController, body::RigidBody, base::RigidBody, accel::SpatialAcceleration)
-    @boundscheck begin
-        @assert RigidBodyDynamics.is_fixed_to_body(body, accel.body)
-        @assert RigidBodyDynamics.is_fixed_to_body(base, accel.base)
-    end
-    setdata!(controller.desiredspatialaccels[(body, base)], accel)
-    nothing
-end
 
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
@@ -117,7 +126,7 @@ function control(controller::MomentumBasedController, t, state)
 
     # Gravitational wrench
     m = controller.mass
-    g = RigidBodyDynamics.gravitational_spatial_acceleration(state.mechanism)
+    g = RigidBodyDynamics.gravitational_spatial_acceleration(controller.mechanism)
     Wg = Wrench(g.frame, zero(g.linear), m * g.linear)
     Wg = transform(Wg, world_to_centroidal)
 
@@ -128,21 +137,24 @@ function control(controller::MomentumBasedController, t, state)
     # Desired joint accelerations
     for (joint, maybe_accel) in controller.desiredjointaccels
         if isvalid(maybe_accel)
-            accel = data(maybe_accel)
+            accel = get(maybe_accel)
             v̇range = velocity_range(state, joint)
             @constraint(model, view(v̇, v̇range) .== accel)
         end
     end
 
     # Desired spatial accelerations
-    for (key, maybe_accel) in controller.desiredspatialaccels
+    for (pair, maybe_accel) in controller.desiredspatialaccels
         if isvalid(maybe_accel)
-            body, base = key
-            accel = data(maybe_accel)
-            path = controller.paths(key)
-            J = controller.jacobians(key)
-            J̇v = -bias_acceleration(state, base) + bias_acceleration(state, body)
-            geometric_jacobian!(jacobian, state, path)
+            base, body = pair
+            accel = get(maybe_accel)
+            path = controller.paths[pair]
+            tf = inv(transform_to_root(state, accel.frame))
+            J = controller.jacobians[pair]
+            J̇v = transform(state, -bias_acceleration(state, base) + bias_acceleration(state, body), tf.to)
+            geometric_jacobian!(J, state, path, tf)
+            @framecheck J.frame J̇v.frame
+            @framecheck J.frame accel.frame
             # @constraint(model, jacobian.angular * ) # TODO: need velocities for joints on path
         end
     end
