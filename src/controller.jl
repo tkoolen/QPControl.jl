@@ -3,13 +3,14 @@ type MomentumBasedController{T}
     num_basis_vectors_per_contact::Int64
     centroidalframe::CartesianFrame3D
     τ::Vector{T}
+    ρ::Vector{T}
     result::DynamicsResult{T, T}
     momentummatrix::MomentumMatrix{Matrix{T}}
     desiredjointaccels::Dict{Joint{T}, Maybe{Vector{T}}}
     desiredspatialaccels::Dict{Pair{Pair{RigidBody{T}, RigidBody{T}}, CartesianFrame3D}, Maybe{SpatialAcceleration{T}}}
     paths::Dict{Pair{RigidBody{T}, RigidBody{T}}, TreePath{RigidBody{T}, Joint{T}}}
     jacobians::Dict{Pair{Pair{RigidBody{T}, RigidBody{T}}, CartesianFrame3D}, GeometricJacobian{Matrix{T}}}
-    v̇weights::Vector{T}
+    v̇weights::Dict{Joint{T}, Vector{T}}
     desiredmomentumrate::Wrench{T}
     momentumrateweight::SMatrix{6, 6, T, 36}
     contactingbodies::Vector{RigidBody{T}}
@@ -29,7 +30,7 @@ type MomentumBasedController{T}
         desiredspatialaccels = Dict()
         paths = Dict()
         jacobians = Dict()
-        v̇weights = zeros(nv)
+        v̇weights = Dict(joint => zeros(num_velocities(joint)) for joint in tree_joints(mechanism))
         desiredmomentumrate = zero(Wrench{T}, centroidalframe)
         momentumrateweight = zero(SMatrix{6, 6, T})
         contactingbodies = RigidBody{T}[]
@@ -46,9 +47,10 @@ type MomentumBasedController{T}
                 nρ += num_basis_vectors_per_contact
             end
         end
+        ρ = zeros(T, nρ)
         wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, nρ), Matrix{T}(3, nρ))
         externalwrenches = Vector{Wrench{T}}(num_bodies(mechanism))
-        new(mechanism, num_basis_vectors_per_contact, centroidalframe, τ, result, momentummatrix, desiredjointaccels, desiredspatialaccels, paths, jacobians, v̇weights,
+        new(mechanism, num_basis_vectors_per_contact, centroidalframe, τ, ρ, result, momentummatrix, desiredjointaccels, desiredspatialaccels, paths, jacobians, v̇weights,
             desiredmomentumrate, momentumrateweight, contactingbodies, contactweights, contactactive, wrenchmatrix, externalwrenches, mass(mechanism))
     end
 end
@@ -96,7 +98,12 @@ function set_desired_accel!(controller::MomentumBasedController, base::RigidBody
 end
 
 set_contact_regularization!(controller::MomentumBasedController, point::ContactPoint, weight) = (controller.contactweights[point] = weight; nothing)
-set_joint_accel_regularization!(controller::MomentumBasedController, weights) = (controller.v̇weights .= weights; nothing)
+set_joint_accel_regularization!(controller::MomentumBasedController, joint::Joint, weights) = (controller.v̇weights[joint] .= weights; nothing)
+function set_joint_accel_regularization!(controller::MomentumBasedController, weight)
+    for weights in values(controller.v̇weights)
+        weights .= weight
+    end
+end
 set_contact_active!(controller::MomentumBasedController, point::ContactPoint, active::Bool) = controller.contactactive[point] = active
 
 function set_desired_momentum_rate!(controller::MomentumBasedController, rate::Wrench, weight::SMatrix{6, 6})
@@ -163,6 +170,7 @@ function control(controller::MomentumBasedController, t, state)
     Gurobi.setparameters!(solver, Silent = true)
     model = Model(solver = solver)
 
+    mechanism = controller.mechanism
     nv = num_velocities(state)
     nρ = num_cols(controller.wrenchmatrix)
 
@@ -185,9 +193,8 @@ function control(controller::MomentumBasedController, t, state)
 
     # Gravitational wrench
     m = controller.mass
-    g = RigidBodyDynamics.gravitational_spatial_acceleration(controller.mechanism)
-    Wg = Wrench(g.frame, zero(g.linear), m * g.linear)
-    Wg = transform(Wg, world_to_centroidal)
+    fg = transform(m * mechanism.gravitationalAcceleration, world_to_centroidal)
+    Wg = Wrench(zero(fg), fg)
 
     # Wrench matrix
     Q = controller.wrenchmatrix
@@ -228,8 +235,8 @@ function control(controller::MomentumBasedController, t, state)
 
     # Objective
     momentumrateterm = @expression(model, dot(ḣerrorvec, controller.momentumrateweight * ḣerrorvec))
-    v̇regularization = @expression(model, sum(controller.v̇weights[i] * v̇[i]^2 for i = 1 : nv))
-    ρregularization = zero(typeof(v̇regularization))
+    v̇regularization = @expression(model, sum(sum(controller.v̇weights[joint] .* view(v̇, velocity_range(state, joint)).^2) for joint in tree_joints(mechanism)))
+    ρregularization = zero(typeof(momentumrateterm))
     index = 1
     for body in controller.contactingbodies
         for point in contact_points(body)
@@ -246,11 +253,12 @@ function control(controller::MomentumBasedController, t, state)
     status = solve(model)
 
     # Inverse dynamics
+    controller.ρ .= getvalue(ρ)
     result = controller.result
-    result.v̇ = getvalue(v̇)
+    result.v̇ .= getvalue(v̇)
     externalwrenches = controller.externalwrenches
     τ = controller.τ
-    back_out_external_wrenches!(externalwrenches, Q, getvalue(ρ), controller.num_basis_vectors_per_contact, controller.contactingbodies)
+    back_out_external_wrenches!(externalwrenches, Q, controller.ρ, controller.num_basis_vectors_per_contact, controller.contactingbodies)
     map!(wrench -> transform(wrench, centroidal_to_world), externalwrenches)
     inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, externalwrenches)
 
