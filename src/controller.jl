@@ -1,3 +1,9 @@
+type ContactSettings{T}
+    weight::T
+    μ::T
+    active::Bool
+end
+
 type MomentumBasedController{T}
     mechanism::Mechanism{T}
     num_basis_vectors_per_contact::Int64
@@ -14,8 +20,7 @@ type MomentumBasedController{T}
     desiredmomentumrate::Wrench{T}
     momentumrateweight::SMatrix{6, 6, T, 36}
     contactingbodies::Vector{RigidBody{T}}
-    contactweights::Dict{ContactPoint, T}
-    contactactive::Dict{ContactPoint, Bool}
+    contactsettings::Dict{ContactPoint, ContactSettings{T}}
     wrenchmatrix::WrenchMatrix{Matrix{T}}
     externalwrenches::Vector{Wrench{T}}
     mass::T
@@ -34,16 +39,14 @@ type MomentumBasedController{T}
         desiredmomentumrate = zero(Wrench{T}, centroidalframe)
         momentumrateweight = zero(SMatrix{6, 6, T})
         contactingbodies = RigidBody{T}[]
-        contactweights = Dict{ContactPoint, T}()
-        contactactive = Dict{ContactPoint, Bool}()
+        contactsettings = Dict{ContactPoint, ContactSettings{T}}()
         nρ = 0
         for body in bodies(mechanism)
             if !isempty(contact_points(body))
                 push!(contactingbodies, body)
             end
             for point in contact_points(body)
-                contactweights[point] = 0
-                contactactive[point] = false
+                contactsettings[point] = ContactSettings(0., 0.8, false)
                 nρ += num_basis_vectors_per_contact
             end
         end
@@ -51,7 +54,7 @@ type MomentumBasedController{T}
         wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, nρ), Matrix{T}(3, nρ))
         externalwrenches = Vector{Wrench{T}}(num_bodies(mechanism))
         new(mechanism, num_basis_vectors_per_contact, centroidalframe, τ, ρ, result, momentummatrix, desiredjointaccels, desiredspatialaccels, paths, jacobians, v̇weights,
-            desiredmomentumrate, momentumrateweight, contactingbodies, contactweights, contactactive, wrenchmatrix, externalwrenches, mass(mechanism))
+            desiredmomentumrate, momentumrateweight, contactingbodies, contactsettings, wrenchmatrix, externalwrenches, mass(mechanism))
     end
 end
 
@@ -61,16 +64,22 @@ Base.eltype{T}(controller::MomentumBasedController{T}) = eltype(typeof(controlle
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
 function clear_contacts!(controller::MomentumBasedController)
-    for point in keys(controller.contactweights)
-        controller.contactactive[point] = false
+    for settings in values(controller.contactsettings)
+        settings.active = false
     end
 end
 
 function clear_desireds!{T}(controller::MomentumBasedController{T})
-    map!(invalidate!, values(controller.desiredjointaccels))
-    map!(invalidate!, values(controller.desiredspatialaccels))
+    for accel in values(controller.desiredjointaccels)
+        invalidate!(accel)
+    end
+    for accel in controller.desiredspatialaccels
+        invalidate!(accel)
+    end
     controller.momentumrateweight = zeros(SMatrix{6, 6, T})
 end
+
+reset!(controller::MomentumBasedController) = (clear_contacts!(controller); clear_desireds!(controller))
 
 function set_desired_accel!(controller::MomentumBasedController, joint::Joint, accel)
     nv = num_velocities(joint)
@@ -97,14 +106,16 @@ function set_desired_accel!(controller::MomentumBasedController, base::RigidBody
     nothing
 end
 
-set_contact_regularization!(controller::MomentumBasedController, point::ContactPoint, weight) = (controller.contactweights[point] = weight; nothing)
+set_contact_regularization!(controller::MomentumBasedController, point::ContactPoint, weight) = (controller.contactsettings[point].weight = weight; nothing)
 set_joint_accel_regularization!(controller::MomentumBasedController, joint::Joint, weights) = (controller.v̇weights[joint] .= weights; nothing)
 function set_joint_accel_regularization!(controller::MomentumBasedController, weight)
     for weights in values(controller.v̇weights)
         weights .= weight
     end
 end
-set_contact_active!(controller::MomentumBasedController, point::ContactPoint, active::Bool) = controller.contactactive[point] = active
+
+set_contact_active!(controller::MomentumBasedController, point::ContactPoint, active::Bool) = controller.contactsettings[point].active = active
+set_friction_coefficient!(controller::MomentumBasedController, point::ContactPoint, μ) = controller.contactsettings[point] = μ
 
 function set_desired_momentum_rate!(controller::MomentumBasedController, rate::Wrench, weight::SMatrix{6, 6})
     @framecheck centroidal_frame(controller) rate.frame
@@ -112,7 +123,7 @@ function set_desired_momentum_rate!(controller::MomentumBasedController, rate::W
     controller.momentumrateweight = weight
 end
 
-function update_wrench_matrix!(Q::WrenchMatrix, contactingbodies, contactactive, num_basis_vectors_per_contact::Int64, state::MechanismState, world_to_centroidal::Transform3D)
+function update_wrench_matrix!(Q::WrenchMatrix, contactingbodies, contactsettings, num_basis_vectors_per_contact::Int64, state::MechanismState, world_to_centroidal::Transform3D)
     @framecheck Q.frame world_to_centroidal.to
     rootframe = world_to_centroidal.from
     T = eltype(typeof(Q))
@@ -120,11 +131,12 @@ function update_wrench_matrix!(Q::WrenchMatrix, contactingbodies, contactactive,
     Δθ = 2 * π / num_basis_vectors_per_contact
     for body in contactingbodies
         for point in contact_points(body)
-            if contactactive[point]
+            settings = contactsettings[point]
+            if settings.active
                 r = location(point)
                 frame = r.frame
                 r = world_to_centroidal * transform(state, r, rootframe)
-                μ = T(0.8) # FIXME
+                μ = settings.μ
                 for i = 0 : num_basis_vectors_per_contact - 1
                     θ = i * Δθ
                     # TODO: would be better not to use cos and sin
@@ -198,7 +210,7 @@ function control(controller::MomentumBasedController, t, state)
 
     # Wrench matrix
     Q = controller.wrenchmatrix
-    update_wrench_matrix!(Q, controller.contactingbodies, controller.contactactive, controller.num_basis_vectors_per_contact, state, world_to_centroidal)
+    update_wrench_matrix!(Q, controller.contactingbodies, controller.contactsettings, controller.num_basis_vectors_per_contact, state, world_to_centroidal)
 
     # Desired joint accelerations
     for (joint, maybe_accel) in controller.desiredjointaccels
@@ -240,7 +252,7 @@ function control(controller::MomentumBasedController, t, state)
     index = 1
     for body in controller.contactingbodies
         for point in contact_points(body)
-            weight = controller.contactweights[point]
+            weight = controller.contactsettings[point].weight
             for i = 1 : controller.num_basis_vectors_per_contact
                 ρregularization += weight * ρ[index]^2
                 index += 1

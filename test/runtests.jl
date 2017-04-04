@@ -8,7 +8,7 @@ using Base.Test
 val = Valkyrie()
 mechanism = val.mechanism
 controller = MomentumBasedController{Float64}(mechanism)
-state = MechanismState(Float64, mechanism);
+state = MechanismState(Float64, mechanism)
 
 @testset "zero velocity free fall" begin
     zero!(state)
