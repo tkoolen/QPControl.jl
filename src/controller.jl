@@ -1,6 +1,7 @@
 type ContactSettings{T}
     weight::T
     μ::T
+    normal::FreeVector3D{SVector{3, T}}
     active::Bool
 end
 
@@ -46,7 +47,7 @@ type MomentumBasedController{T}
                 push!(contactingbodies, body)
             end
             for point in contact_points(body)
-                contactsettings[point] = ContactSettings(0., 0.8, false)
+                contactsettings[point] = ContactSettings(0., 0.8, FreeVector3D(location(point).frame, 0., 0., 0.), false)
                 nρ += num_basis_vectors_per_contact
             end
         end
@@ -114,8 +115,19 @@ function set_joint_accel_regularization!(controller::MomentumBasedController, we
     end
 end
 
-set_contact_active!(controller::MomentumBasedController, point::ContactPoint, active::Bool) = controller.contactsettings[point].active = active
-set_friction_coefficient!(controller::MomentumBasedController, point::ContactPoint, μ) = controller.contactsettings[point] = μ
+function enable_contact!(controller::MomentumBasedController, point::ContactPoint, μ::Number, normal::FreeVector3D)
+    settings = controller.contactsettings[point]
+    settings.active = true
+    settings.μ = μ
+    settings.normal = normalize(normal)
+    nothing
+end
+
+function disable_contact!(controller::MomentumBasedController, point::ContactPoint)
+    settings = controller.contactsettings[point]
+    settings.active = false
+    nothing
+end
 
 function set_desired_momentum_rate!(controller::MomentumBasedController, rate::Wrench, weight::SMatrix{6, 6})
     @framecheck centroidal_frame(controller) rate.frame
@@ -133,15 +145,14 @@ function update_wrench_matrix!(Q::WrenchMatrix, contactingbodies, contactsetting
         for point in contact_points(body)
             settings = contactsettings[point]
             if settings.active
-                r = location(point)
-                frame = r.frame
-                r = world_to_centroidal * transform(state, r, rootframe)
+                r = world_to_centroidal * transform(state, location(point), rootframe)
                 μ = settings.μ
+                normal = world_to_centroidal * transform(state, settings.normal, rootframe)
+                @framecheck r.frame normal.frame
+                rot = Rotations.rotation_between(SVector(0., 0., 1.), normal.v)
                 for i = 0 : num_basis_vectors_per_contact - 1
                     θ = i * Δθ
-                    # TODO: would be better not to use cos and sin
-                    β = FreeVector3D(location(point).frame, normalize(SVector(μ * cos(θ), μ * sin(θ), one(T)))) # FIXME: assumes normal is z axis of frame in which point is expressed
-                    β = world_to_centroidal * transform(state, β, rootframe)
+                    β = FreeVector3D(normal.frame, rot * normalize(SVector(μ * cos(θ), μ * sin(θ), one(T))))
                     Qcol = Wrench(r, β)
                     @framecheck Q.frame Qcol.frame
                     view(Q.angular, :, col)[:] = Qcol.angular
@@ -252,7 +263,8 @@ function control(controller::MomentumBasedController, t, state)
     index = 1
     for body in controller.contactingbodies
         for point in contact_points(body)
-            weight = controller.contactsettings[point].weight
+            settings = controller.contactsettings[point]
+            weight = settings.active ? settings.weight : 0.
             for i = 1 : controller.num_basis_vectors_per_contact
                 ρregularization += weight * ρ[index]^2
                 index += 1
