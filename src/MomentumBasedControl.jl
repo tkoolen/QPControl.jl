@@ -8,28 +8,34 @@ using RigidBodyDynamics.Contact
 using JuMP
 using StaticArrays
 using Rotations
-import DataStructures: OrderedDict
 import Gurobi
 
+import RigidBodyDynamics: set! # TODO
+
 export MomentumBasedController,
+    ContactSettings,
+    SpatialAccelerationTask,
+    JointAccelerationTask,
+    MomentumRateTask,
     PDGains,
-    control,
     centroidal_transform,
     centroidal_frame,
+    add_contact!,
+    add_contacts!,
+    add_mechanism_contacts!,
+    add!,
+    add_mechanism_joint_accel_tasks!,
     clear_contacts!,
     clear_desireds!,
-    enable_contact!,
-    disable_contact!,
     reset!,
-    set_desired_accel!,
-    set_desired_momentum_rate!,
-    set_contact_weight,
-    set_joint_accel_weights,
-    set_contact_regularization!,
-    set_joint_accel_regularization!
+    regularize_joint_accels!,
+    control,
+    set!,
+    disable!,
+    num_basis_vectors
 
-
-include("util.jl")
+include("contact_settings.jl")
+include("motion_tasks.jl")
 include("controller.jl")
 include("pd.jl")
 

@@ -8,20 +8,16 @@ using Base.Test
 
 val = Valkyrie()
 mechanism = val.mechanism
-controller = MomentumBasedController{Float64}(mechanism; num_basis_vectors_per_contact = 4)
+controller = MomentumBasedController{Float64}(mechanism)
+contacts = add_mechanism_contacts!(controller)
+jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
 state = MechanismState(Float64, mechanism)
 
 @testset "zero velocity free fall" begin
     zero!(state)
     rand_configuration!(state)
-    set_joint_accel_regularization!(controller, 1.)
-    set_joint_accel_regularization!(controller, val.floatingjoint, 0.)
-    for side in instances(Side)
-        foot = val.feet[side]
-        for point in contact_points(foot)
-            set_contact_regularization!(controller, point, 1.)
-        end
-    end
+    regularize_joint_accels!(controller, 1.)
+    disable!(jointacceltasks[val.floatingjoint])
     control(controller, 0., state)
 
     for joint in tree_joints(mechanism)
@@ -42,8 +38,6 @@ end
 
 @testset "achievable momentum rate" begin
     srand(1)
-    @assert controller.num_basis_vectors_per_contact >= 4 # test relies on this fact
-
     for p in linspace(0., 1., 5)
         rand!(state)
         com = center_of_mass(state)
@@ -55,14 +49,15 @@ end
         fg = world_to_centroidal * (mass(mechanism) * mechanism.gravitationalAcceleration)
         ḣdes = Wrench(zero(fg), fg)
         for foot in values(val.feet)
-            for point in contact_points(foot)
+            for contactsettings in contacts[foot]
                 active = rand() < p
                 if active
-                    r = RigidBodyDynamics.Contact.location(point)
+                    @assert num_basis_vectors(contactsettings) >= 4 # test relies on this fact
+                    r = contactsettings.point
                     μ = rand()
                     normal = FreeVector3D(r.frame, normalize(randn(SVector{3})))
-                    enable_contact!(controller, point, μ, normal)
-                    fnormal = 0.#50. * rand()
+                    set!(contactsettings, 0., μ, normal)
+                    fnormal = 50. * rand()
                     μreduced = sqrt(2) / 2 * μ # due to polyhedral inner approximation; assumes 4 basis vectors or more
                     ftangential = μreduced * fnormal * rand() * cross(normal, FreeVector3D(normal.frame, normalize(randn(SVector{3}))))
                     f = fnormal * normal + ftangential
@@ -71,12 +66,11 @@ end
                     wrench = Wrench(r, f)
                     ḣdes += transform(wrench, world_to_centroidal * transform_to_root(state, wrench.frame))
                 else
-                    disable_contact!(controller, point)
+                    disable!(contactsettings)
                 end
             end
         end
-        set_desired_momentum_rate!(controller, ḣdes, eye(SMatrix{6, 6}))
-
+        add!(controller, MomentumRateTask(ḣdes, eye(SMatrix{3, 3}), eye(SMatrix{3, 3}), 1.))
         control(controller, 0., state)
 
         # Ensure that desired momentum rate is achieved.
