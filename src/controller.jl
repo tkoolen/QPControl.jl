@@ -151,6 +151,19 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
     end
 end
 
+function velocity_indices(path::TreePath, state::MechanismState)
+    # TODO: inefficient; shouldn't need to be done every tick; not state-dependent:
+    inds = Int64[]
+    for joint in path.source_to_lca
+        append!(inds, velocity_range(state, joint))
+    end
+    for i = length(path.target_to_lca) : -1 : 1
+        joint = path.target_to_lca[i]
+        append!(inds, velocity_range(state, joint))
+    end
+    inds
+end
+
 function control(controller::MomentumBasedController, t, state)
     T = eltype(controller)
     mechanism = controller.mechanism
@@ -198,22 +211,14 @@ function control(controller::MomentumBasedController, t, state)
     for task in controller.spatialacceltasks
         if isenabled(task)
             J = task.jacobian
+            desired = task.desired
             path = task.path
             world_to_desired = inv(transform_to_root(state, desired.frame))
             geometric_jacobian!(J, state, path, world_to_desired)
-            J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), tf.to)
+            J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), desired.frame)
             @framecheck J.frame J̇v.frame
             @framecheck J.frame desired.frame
-            # TODO: inefficient, messy:
-            inds = Int64[]
-            for joint in path.source_to_lca
-                append!(inds, velocity_range(state, joint))
-            end
-            for i = length(path.target_to_lca) : -1 : 1
-                joint = path.target_to_lca[i]
-                append!(inds, velocity_range(state, joint))
-            end
-            error = task.desired - (J * v̇[task.velocityinds] + J̇v)
+            error = -(SpatialAcceleration(J, view(v̇, velocity_indices(path, state))) + J̇v) + task.desired
             angularerror = task.angularselectionmatrix * error.angular
             linearerror = task.linearselectionmatrix * error.linear
             if isconstraint(task)

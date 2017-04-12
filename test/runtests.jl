@@ -79,3 +79,27 @@ end
         @test isapprox(ḣdes, ḣ; atol = 1e-3)
     end
 end
+
+@testset "spatial acceleration" begin
+    rand!(state)
+    controller = MomentumBasedController{Float64}(mechanism)
+    body = val.feet[left]
+    base = val.palms[right]
+    frame = default_frame(base)
+    task = SpatialAccelerationTask(path(mechanism, base, body), frame, eye(3), eye(3))
+    add!(controller, task)
+
+    for weight in [1., Inf]
+        reset!(controller)
+        if isinf(weight)
+            regularize_joint_accels!(controller, 1.)
+        end
+        desiredaccel = rand(SpatialAcceleration{Float64}, default_frame(body), default_frame(base), frame)
+        set!(task, desiredaccel, weight)
+        control(controller, 0., state)
+        v̇ = controller.result.v̇
+        accel = relative_acceleration(state, body, base, v̇)
+        accel = transform(state, accel, frame)
+        @test isapprox(accel, desiredaccel, atol = 1e-8)
+    end
+end
