@@ -13,6 +13,7 @@ import Gurobi
 import RigidBodyDynamics: set! # TODO
 
 export MomentumBasedController,
+    MomentumBasedControllerState,
     ContactSettings,
     SpatialAccelerationTask,
     JointAccelerationTask,

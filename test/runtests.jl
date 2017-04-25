@@ -12,13 +12,14 @@ controller = MomentumBasedController{Float64}(mechanism)
 contacts = add_mechanism_contacts!(controller)
 jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
 state = MechanismState(Float64, mechanism)
+controllerstate = MomentumBasedControllerState(state)
 
 @testset "zero velocity free fall" begin
     zero!(state)
     rand_configuration!(state)
     regularize_joint_accels!(controller, 1.)
     disable!(jointacceltasks[val.floatingjoint])
-    control(controller, 0., state)
+    control(controller, 0., controllerstate)
 
     for joint in tree_joints(mechanism)
         if joint == val.floatingjoint
@@ -44,6 +45,7 @@ end
         centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
         world_to_centroidal = inv(centroidal_to_world)
         reset!(controller)
+        reset!(controllerstate)
 
         # set random active contacts and random achievable wrench
         fg = world_to_centroidal * (mass(mechanism) * mechanism.gravitationalAcceleration)
@@ -71,7 +73,7 @@ end
             end
         end
         add!(controller, MomentumRateTask(ḣdes, eye(SMatrix{3, 3}), eye(SMatrix{3, 3}), 1.))
-        control(controller, 0., state)
+        control(controller, 0., controllerstate)
 
         # Ensure that desired momentum rate is achieved.
         ḣ = Wrench(momentum_matrix(state), controller.result.v̇) + momentum_rate_bias(state)
@@ -91,15 +93,49 @@ end
 
     for weight in [1., Inf]
         reset!(controller)
+        reset!(controllerstate)
         if isinf(weight)
             regularize_joint_accels!(controller, 1.)
         end
         desiredaccel = rand(SpatialAcceleration{Float64}, default_frame(body), default_frame(base), frame)
         set!(task, desiredaccel, weight)
-        control(controller, 0., state)
+        control(controller, 0., controllerstate)
         v̇ = controller.result.v̇
         accel = relative_acceleration(state, body, base, v̇)
         accel = transform(state, accel, frame)
         @test isapprox(accel, desiredaccel, atol = 1e-8)
     end
+end
+
+@testset "Δt" begin
+    rand!(state)
+    Δt = 1.
+    controller = MomentumBasedController{Float64}(mechanism, Δt)
+    contacts = add_mechanism_contacts!(controller)
+    tasks = add_mechanism_joint_accel_tasks!(controller)
+
+    randomize = () -> begin
+        for task in values(tasks)
+            set!(task, rand(), 1.)
+        end
+        for (body, contactsettings) in contacts
+            for contactpointsetting in contactsettings
+                frame = default_frame(body)
+                set!(contactpointsetting, 1e-3, 100., rand(FreeVector3D, Float64, frame))
+            end
+        end
+        rand!(state)
+    end
+
+    controllerstate = MomentumBasedControllerState(state)
+    t0 = 2.
+    randomize()
+    τ1 = copy(control(controller, t0, controllerstate))
+    for t in linspace(t0, t0 + Δt - 1e-3, 10)
+        randomize()
+        τ = control(controller, t, controllerstate)
+        @test all(τ1 .== τ)
+    end
+    randomize()
+    @test any(τ1 .!= control(controller, t0 + Δt + 1e-3, controllerstate))
 end
