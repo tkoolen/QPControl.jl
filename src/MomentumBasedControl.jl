@@ -33,7 +33,8 @@ export MomentumBasedController,
     control,
     set!,
     disable!,
-    num_basis_vectors
+    num_basis_vectors,
+    pd
 
 include("contact_settings.jl")
 include("motion_tasks.jl")
