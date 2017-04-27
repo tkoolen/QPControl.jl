@@ -168,11 +168,7 @@ end
 function velocity_indices(path::TreePath, state::MechanismState)
     # TODO: inefficient; shouldn't need to be done every tick; not state-dependent:
     inds = Int64[]
-    for joint in path.source_to_lca
-        append!(inds, velocity_range(state, joint))
-    end
-    for i = length(path.target_to_lca) : -1 : 1
-        joint = path.target_to_lca[i]
+    for (joint, direction) in path
         append!(inds, velocity_range(state, joint))
     end
     inds
