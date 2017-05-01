@@ -1,10 +1,80 @@
 using MomentumBasedControl
 using RigidBodyDynamics
+using RigidBodyDynamics.OdeIntegrators
 using BipedControlUtil
 using ValkyrieRobot
 using StaticArrays
 using Rotations
 using Base.Test
+
+@testset "pd" begin
+    srand(512)
+    @test pd(PDGains(1, 2), 3, 4) == -11
+
+    let
+        gains = PDGains(1, 2)
+        e = [3; 4; 5]
+        ė = [6; 7; 8]
+        @test pd(gains, e, ė) == ((e, ė) -> pd(gains, e, ė)).(e, ė)
+    end
+
+    let
+        gains = PDGains(5, 6)
+        x = SVector(1, 2)
+        ẋ = SVector(5, 6)
+        @test pd(gains, x, ẋ) == pd(gains, x, zero(x), ẋ, zero(ẋ))
+    end
+
+    let
+        gains = PDGains(2, 3)
+        e = RotX(rand())
+        ė = rand() * SVector(1, 0, 0)
+        @test pd(gains, e, ė)[1] ≈ pd(gains, e.theta, ė[1])
+    end
+
+    let
+        mechanism = rand_floating_tree_mechanism(Float64) # single floating body
+        joint = first(tree_joints(mechanism))
+        body = successor(joint, mechanism)
+        base = root_body(mechanism)
+
+        baseframe = default_frame(base)
+        desiredframe = CartesianFrame3D("desired")
+        actualframe = frame_after(joint)
+
+        state = MechanismState(Float64, mechanism)
+        rand!(state)
+
+        xdes = rand(Transform3D, desiredframe, baseframe)
+        vdes = zero(Twist{Float64}, desiredframe, baseframe, actualframe)
+        gains = DoubleGeodesicPDGains(baseframe, PDGains(100, 20), PDGains(100, 20)) # world-fixed gains
+
+        result = DynamicsResult(Float64, mechanism)
+        dyn! = (vd, sd, t, state) -> begin
+            x = transform_to_root(state, body)
+            invx =  inv(x)
+            v = transform(twist_wrt_world(state, body), invx)
+            v̇des = pd(transform(gains, invx), x, xdes, v, vdes)
+            τ = inverse_dynamics(state, Array(v̇des))
+            dynamics!(result, state, τ)
+            copy!(vd, result.v̇)
+            copy!(sd, result.ṡ)
+            nothing
+        end
+
+        finaltime = 3.
+        Δt = 1e-3
+        tableau = runge_kutta_4(Float64)
+        storage = ExpandingStorage{Float64}(ceil(Int64, finaltime / Δt * 1.001))
+        integrator = MuntheKaasIntegrator(dyn!, tableau, storage)
+        integrate(integrator, state, finaltime, Δt)
+
+        x = transform_to_root(state, body)
+        v = transform(twist_wrt_world(state, body), inv(x))
+        @test isapprox(x, xdes * eye(Transform3D, actualframe, desiredframe), atol = 1e-6)
+        @test isapprox(v, vdes + zero(Twist{Float64}, actualframe, desiredframe, actualframe), atol = 1e-6)
+    end
+end
 
 val = Valkyrie()
 mechanism = val.mechanism
@@ -15,6 +85,7 @@ state = MechanismState(Float64, mechanism)
 controllerstate = MomentumBasedControllerState(state)
 
 @testset "zero velocity free fall" begin
+    srand(5354)
     zero!(state)
     rand_configuration!(state)
     regularize_joint_accels!(controller, 1.)
@@ -26,13 +97,13 @@ controllerstate = MomentumBasedControllerState(state)
             baseaccel = relative_acceleration(state, val.pelvis, root_body(mechanism), controller.result.v̇)
             baseaccel = transform(state, baseaccel, frame_after(val.floatingjoint))
             angularaccel = FreeVector3D(baseaccel.frame, baseaccel.angular)
-            @test isapprox(angularaccel, FreeVector3D(frame_after(val.floatingjoint), zeros(SVector{3})), atol = 1e-7)
+            @test isapprox(angularaccel, FreeVector3D(frame_after(val.floatingjoint), zeros(SVector{3})), atol = 1e-6)
             linearaccel = FreeVector3D(baseaccel.frame, baseaccel.linear)
             linearaccel = transform_to_root(state, linearaccel.frame) * linearaccel
-            @test isapprox(linearaccel, mechanism.gravitationalAcceleration; atol = 1e-7)
+            @test isapprox(linearaccel, mechanism.gravitationalAcceleration; atol = 1e-6)
         else
             v̇joint = controller.result.v̇[velocity_range(state, joint)]
-            @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-7)
+            @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-6)
         end
     end
 end
@@ -83,6 +154,7 @@ end
 end
 
 @testset "spatial acceleration" begin
+    srand(533)
     rand!(state)
     controller = MomentumBasedController{Float64}(mechanism)
     body = val.feet[left]
@@ -108,6 +180,7 @@ end
 end
 
 @testset "Δt" begin
+    srand(2533)
     rand!(state)
     Δt = 1.
     controller = MomentumBasedController{Float64}(mechanism, Δt)

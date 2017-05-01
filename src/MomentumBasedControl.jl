@@ -8,6 +8,7 @@ using RigidBodyDynamics.Contact
 using JuMP
 using StaticArrays
 using Rotations
+using Compat
 import Gurobi
 
 import RigidBodyDynamics: set! # TODO
@@ -19,6 +20,7 @@ export MomentumBasedController,
     JointAccelerationTask,
     MomentumRateTask,
     PDGains,
+    DoubleGeodesicPDGains,
     centroidal_transform,
     centroidal_frame,
     add_contact!,
