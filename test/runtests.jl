@@ -38,6 +38,49 @@ using Base.Test
         body = successor(joint, mechanism)
         base = root_body(mechanism)
 
+        state = MechanismState(Float64, mechanism)
+        rand!(state)
+
+        Rdes = rand(RotMatrix{3})
+        ωdes = zeros(SVector{3})
+        gains = PDGains(100, 20)
+
+        result = DynamicsResult(Float64, mechanism)
+        dyn! = (vd, sd, t, state) -> begin
+            H = transform_to_root(state, body)
+            T = transform(twist_wrt_world(state, body), inv(H))
+            R = rotation(H)
+            ω = T.angular
+            ωddes = pd(gains, R, Rdes, ω, ωdes)
+            v̇des = Array([ωddes; zeros(ωddes)])
+            τ = inverse_dynamics(state, v̇des)
+            dynamics!(result, state, τ)
+            copy!(vd, result.v̇)
+            copy!(sd, result.ṡ)
+        end
+
+        finaltime = 3.
+        Δt = 1e-3
+        tableau = runge_kutta_4(Float64)
+        storage = ExpandingStorage{Float64}(ceil(Int64, finaltime / Δt * 1.001))
+        integrator = MuntheKaasIntegrator(dyn!, tableau, storage)
+        integrate(integrator, state, finaltime, Δt)
+
+        H = transform_to_root(state, body)
+        T = transform(twist_wrt_world(state, body), inv(H))
+        R = rotation(H)
+        ω = T.angular
+
+        @test isapprox(R * Rdes', eye(Rdes); atol = 1e-8)
+        @test isapprox(ω, zero(ω); atol = 1e-8)
+    end
+
+    let
+        mechanism = rand_floating_tree_mechanism(Float64) # single floating body
+        joint = first(tree_joints(mechanism))
+        body = successor(joint, mechanism)
+        base = root_body(mechanism)
+
         baseframe = default_frame(base)
         desiredframe = CartesianFrame3D("desired")
         actualframe = frame_after(joint)
@@ -52,7 +95,7 @@ using Base.Test
         result = DynamicsResult(Float64, mechanism)
         dyn! = (vd, sd, t, state) -> begin
             x = transform_to_root(state, body)
-            invx =  inv(x)
+            invx = inv(x)
             v = transform(twist_wrt_world(state, body), invx)
             v̇des = pd(transform(gains, invx), x, xdes, v, vdes)
             τ = inverse_dynamics(state, Array(v̇des))
