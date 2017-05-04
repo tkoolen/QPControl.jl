@@ -262,8 +262,8 @@ function control(controller::MomentumBasedController, t, controllerstate::Moment
         momentumratetask = controller.momentumratetask
         if isenabled(momentumratetask)
             error = momentumratetask.desired - (Wrench(A, v̇) + Ȧv)
-            angularerror = momentumratetask.angularselectionmatrix * error.angular
-            linearerror = momentumratetask.linearselectionmatrix * error.linear
+            angularerror = Array(momentumratetask.angularselectionmatrix * error.angular)
+            linearerror = Array(momentumratetask.linearselectionmatrix * error.linear)
             if isconstraint(momentumratetask)
                 @constraint(model, angularerror .== 0)
                 @constraint(model, linearerror .== 0)
