@@ -1,6 +1,8 @@
 abstract MotionTask{T}
 abstract MutableMotionTask{T} <: MotionTask{T}
 
+
+# SpatialAccelerationTask
 type SpatialAccelerationTask{T} <: MutableMotionTask{T}
     path::TreePath{RigidBody{T}, Joint{T}}
     jacobian::GeometricJacobian{Matrix{T}}
@@ -35,6 +37,9 @@ function set!(task::SpatialAccelerationTask, desired::SpatialAcceleration, weigh
     task.weight = weight
 end
 
+RigidBodyDynamics.zero!(task::SpatialAccelerationTask, weight::Number) = set!(task, zero(task.desired), weight)
+
+# JointAccelerationTask
 type JointAccelerationTask{T} <: MutableMotionTask{T}
     joint::Joint{T}
     desired::Vector{T}
@@ -51,6 +56,8 @@ function set!(task::JointAccelerationTask, desired::Union{Number, AbstractVector
     task.weight = weight
 end
 
+
+# MomentumRateTask
 type MomentumRateTask{T} <: MotionTask{T}
     desired::Wrench{T}
     angularselectionmatrix::SMatrix{3, 3, T, 9}

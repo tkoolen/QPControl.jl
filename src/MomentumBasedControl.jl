@@ -30,14 +30,17 @@ export MomentumBasedController,
     clear_desireds!,
     reset!,
     regularize_joint_accels!,
+    pd_center_of_mass!,
     control,
     set!,
     disable!,
     num_basis_vectors
 
+include("pd.jl") # TODO: move to separate package
+
+using .PDControl
 include("contact_settings.jl")
 include("motion_tasks.jl")
 include("controller.jl")
-include("pd.jl")
 
 end # module

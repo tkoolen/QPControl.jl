@@ -115,6 +115,26 @@ function regularize_joint_accels!(controller::MomentumBasedController, weight)
     end
 end
 
+function pd_center_of_mass!(controller::MomentumBasedController, gains::PDGains, state::MechanismState,
+        desired_com::Point3D, desired_com_velocity::FreeVector3D, weight::Number)
+    m = controller.mass
+    c = center_of_mass(state)
+    world_to_centroidal = Transform3D(c.frame, centroidal_frame(controller), -c.v)
+    h = transform(momentum(state), world_to_centroidal)
+
+    cdes = world_to_centroidal * transform(state, desired_com, world_to_centroidal.from)
+    ċdes = world_to_centroidal * transform(state, desired_com_velocity, world_to_centroidal.from)
+
+    c = Point3D(centroidal_frame(controller), zero(c.v))
+    ċ = FreeVector3D(h.frame, h.linear / m)
+
+    c̈des = pd(gains, c, cdes, ċ, ċdes)
+    linear_momentum_rate_des = m * c̈des
+
+    momentum_rate_des = Wrench(zero(linear_momentum_rate_des), linear_momentum_rate_des)
+    add!(controller, MomentumRateTask(momentum_rate_des, zero(SMatrix{3, 3}), eye(SMatrix{3, 3}), weight))
+end
+
 function update_wrench_matrix!(controller::MomentumBasedController, state::MechanismState, world_to_centroidal::Transform3D)
     Q = controller.wrenchmatrix
     @framecheck Q.frame world_to_centroidal.to
