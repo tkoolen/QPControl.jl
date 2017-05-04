@@ -1,3 +1,15 @@
+module PDControl
+
+using RigidBodyDynamics
+using StaticArrays
+using Rotations
+using Compat
+
+export
+    PDGains,
+    DoubleGeodesicPDGains,
+    pd
+
 @compat abstract type AbstractPDGains{T} end
 
 immutable PDGains{T} <: AbstractPDGains{T}
@@ -50,7 +62,9 @@ function pd(gains::DoubleGeodesicPDGains, e::Transform3D, ė::Twist)
     @framecheck ė.base e.to
     @framecheck ė.frame ė.body
     @framecheck gains.frame ė.body # gains should be expressed in actual body frame
-    Re = rotation(e)
-    pe = translation(e)
-    SpatialAcceleration(ė.body, ė.base, ė.frame, pd(gains.angular, Re, ė.angular), pd(gains.linear, Re' * pe, ė.linear))
+    R = rotation(e)
+    p = translation(e)
+    SpatialAcceleration(ė.body, ė.base, ė.frame, pd(gains.angular, R, ė.angular), pd(gains.linear, R' * p, ė.linear))
 end
+
+end # module

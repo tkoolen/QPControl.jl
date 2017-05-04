@@ -19,8 +19,6 @@ export MomentumBasedController,
     SpatialAccelerationTask,
     JointAccelerationTask,
     MomentumRateTask,
-    PDGains,
-    DoubleGeodesicPDGains,
     centroidal_transform,
     centroidal_frame,
     add_contact!,
@@ -35,8 +33,7 @@ export MomentumBasedController,
     control,
     set!,
     disable!,
-    num_basis_vectors,
-    pd
+    num_basis_vectors
 
 include("contact_settings.jl")
 include("motion_tasks.jl")

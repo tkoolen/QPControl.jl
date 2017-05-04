@@ -1,4 +1,5 @@
 using MomentumBasedControl
+using MomentumBasedControl.PDControl
 using RigidBodyDynamics
 using RigidBodyDynamics.OdeIntegrators
 using BipedControlUtil
