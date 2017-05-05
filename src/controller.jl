@@ -195,6 +195,7 @@ function velocity_indices(path::TreePath, state::MechanismState)
 end
 
 function control(controller::MomentumBasedController, t, controllerstate::MomentumBasedControllerState)
+    t < controllerstate.next_control_time - controller.Δt - eps(typeof(t)) && reset!(controllerstate)
     if t >= controllerstate.next_control_time
         controllerstate.next_control_time = t + controller.Δt
         state = controllerstate.mechstate
