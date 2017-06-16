@@ -24,7 +24,7 @@ type MomentumBasedController{T}
     result::DynamicsResult{T, T}
     momentummatrix::MomentumMatrix{Matrix{T}}
     wrenchmatrix::WrenchMatrix{Matrix{T}}
-    externalwrenches::Vector{Wrench{T}}
+    externalwrenches::RigidBodyDynamics.BodyDict{T, Wrench{T}}
     contactsettings::Vector{ContactSettings{T}}
     spatialacceltasks::Vector{SpatialAccelerationTask{T}}
     jointacceltasks::Vector{JointAccelerationTask{T}}
@@ -38,7 +38,8 @@ type MomentumBasedController{T}
         result = DynamicsResult(T, mechanism)
         momentummatrix = MomentumMatrix(centroidalframe, Matrix{T}(3, nv), Matrix{T}(3, nv))
         wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, 0), Matrix{T}(3, 0))
-        externalwrenches = Vector{Wrench{T}}(num_bodies(mechanism))
+        rootframe = root_frame(mechanism)
+        externalwrenches = RigidBodyDynamics.BodyDict(b => zero(Wrench{T}, rootframe) for b in bodies(mechanism))
         contactsettings = Vector{ContactSettings{T}}()
         spatialacceltasks = Vector{SpatialAccelerationTask{T}}()
         jointacceltasks = Vector{JointAccelerationTask{T}}()
@@ -170,17 +171,16 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
     ρ = controller.ρ
     externalwrenches = controller.externalwrenches
     T = eltype(controller)
-    for i in eachindex(externalwrenches)
-        externalwrenches[i] = zero(Wrench{T}, Q.frame)
+    for body in keys(externalwrenches)
+        externalwrenches[body] = zero(Wrench{T}, Q.frame)
     end
     for settings in controller.contactsettings
         body = settings.body
-        bodyind = vertex_index(body)
         ρrange = settings.ρrange
         for col in ρrange
             angular = SVector{3}(view(Q.angular, :, col)) * ρ[col]
             linear = SVector{3}(view(Q.linear, :, col)) * ρ[col]
-            externalwrenches[bodyind] += Wrench(Q.frame, angular, linear)
+            externalwrenches[body] += Wrench(Q.frame, angular, linear)
         end
     end
 end
@@ -305,7 +305,7 @@ function control(controller::MomentumBasedController, t, controllerstate::Moment
         externalwrenches = controller.externalwrenches
         τ = controllerstate.τ
         back_out_external_wrenches!(controller)
-        map!(wrench -> transform(wrench, centroidal_to_world), externalwrenches)
+        map!(wrench -> transform(wrench, centroidal_to_world), values(externalwrenches))
         inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, externalwrenches)
     end
 
