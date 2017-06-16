@@ -9,6 +9,7 @@ using JuMP
 using StaticArrays
 using Rotations
 using Compat
+using ForwardDiff
 import Gurobi
 
 import RigidBodyDynamics: set! # TODO
@@ -34,7 +35,8 @@ export MomentumBasedController,
     control,
     set!,
     disable!,
-    num_basis_vectors
+    num_basis_vectors,
+    val_deriv_deriv2
 
 include("pd.jl") # TODO: move to separate package
 
@@ -42,5 +44,6 @@ using .PDControl
 include("contact_settings.jl")
 include("motion_tasks.jl")
 include("controller.jl")
+include("util.jl")
 
 end # module
