@@ -293,6 +293,12 @@ function control(controller::MomentumBasedController, t, controllerstate::Moment
             end
         end
 
+        # Handle contact weights
+        for settings in controller.contactsettings
+            ρcontact = view(ρ, settings.ρrange)
+            obj += settings.weight * dot(ρcontact, ρcontact)
+        end
+
         @objective(model, Min, obj)
 
         # Solve
