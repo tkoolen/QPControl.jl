@@ -7,13 +7,13 @@ type ContactSettings{T}
     maxnormalforce::T
     ρrange::UnitRange{Int64}
 
-    function ContactSettings(body::RigidBody{T}, point::Point3D, ρrange::UnitRange{Int64})
+    function (::Type{ContactSettings{T}}){T}(body::RigidBody{T}, point::Point3D, ρrange::UnitRange{Int64})
         @framecheck point.frame default_frame(body)
         weight = zero(T)
         μ = zero(T)
         normal = FreeVector3D(point.frame, zeros(SVector{3, T}))
         maxnormalforce = zero(T)
-        new(body, point, weight, μ, normal, maxnormalforce, ρrange)
+        new{T}(body, point, weight, μ, normal, maxnormalforce, ρrange)
     end
 end
 

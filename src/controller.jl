@@ -30,7 +30,7 @@ type MomentumBasedController{T}
     jointacceltasks::Vector{JointAccelerationTask{T}}
     momentumratetask::MomentumRateTask{T}
 
-    function MomentumBasedController(mechanism::Mechanism{T}, Δt = 5e-3)
+    function (::Type{MomentumBasedController{T}}){T}(mechanism::Mechanism{T}, Δt = 5e-3)
         centroidalframe = CartesianFrame3D("centroidal")
         m = mass(mechanism)
         nv = num_velocities(mechanism)
@@ -45,7 +45,7 @@ type MomentumBasedController{T}
         jointacceltasks = Vector{JointAccelerationTask{T}}()
         momentumratetask = MomentumRateTask(T, centroidalframe)
 
-        new(mechanism, Δt, centroidalframe, m, ρ, result, momentummatrix, wrenchmatrix, externalwrenches,
+        new{T}(mechanism, Δt, centroidalframe, m, ρ, result, momentummatrix, wrenchmatrix, externalwrenches,
             contactsettings, spatialacceltasks, jointacceltasks, momentumratetask)
     end
 end
@@ -305,7 +305,7 @@ function control(controller::MomentumBasedController, t, controllerstate::Moment
         externalwrenches = controller.externalwrenches
         τ = controllerstate.τ
         back_out_external_wrenches!(controller)
-        map!(wrench -> transform(wrench, centroidal_to_world), values(externalwrenches))
+        map!(wrench -> transform(wrench, centroidal_to_world), values(externalwrenches), values(externalwrenches))
         inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, externalwrenches)
     end
 
