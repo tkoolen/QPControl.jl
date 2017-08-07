@@ -12,7 +12,7 @@ using Compat
 using ForwardDiff
 import Gurobi
 
-import RigidBodyDynamics: set! # TODO
+import RigidBodyDynamics: set!, GenericJoint # TODO
 
 export MomentumBasedController,
     MomentumBasedControllerState,

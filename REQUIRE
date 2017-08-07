@@ -1,3 +1,4 @@
 julia 0.5
 RigidBodyDynamics 0.2.0
 JuMP
+Gurobi

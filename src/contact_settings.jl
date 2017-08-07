@@ -7,7 +7,7 @@ type ContactSettings{T}
     maxnormalforce::T
     ρrange::UnitRange{Int64}
 
-    function (::Type{ContactSettings{T}}){T}(body::RigidBody{T}, point::Point3D, ρrange::UnitRange{Int64})
+    function ContactSettings(body::RigidBody{T}, point::Point3D, ρrange::UnitRange{Int64}) where {T}
         @framecheck point.frame default_frame(body)
         weight = zero(T)
         μ = zero(T)
@@ -17,12 +17,11 @@ type ContactSettings{T}
     end
 end
 
-ContactSettings{T}(body::RigidBody{T}, point::Point3D, ρrange::UnitRange{Int64}) = ContactSettings{T}(body, point, ρrange)
 num_basis_vectors(settings::ContactSettings) = length(settings.ρrange)
 isenabled(settings::ContactSettings) = settings.maxnormalforce > 0
 disable!(settings::ContactSettings) = settings.maxnormalforce = 0
 
-function set!{T}(settings::ContactSettings{T}, weight::T, μ::T, normal::FreeVector3D, maxnormalforce::T = Inf)
+function set!(settings::ContactSettings{T}, weight::T, μ::T, normal::FreeVector3D, maxnormalforce::T = Inf) where {T}
     settings.weight = weight
     settings.μ = μ
     settings.normal = normal

@@ -30,16 +30,16 @@ type MomentumBasedController{T}
     jointacceltasks::Vector{JointAccelerationTask{T}}
     momentumratetask::MomentumRateTask{T}
 
-    function (::Type{MomentumBasedController{T}}){T}(mechanism::Mechanism{T}, Δt = 5e-3)
+    function MomentumBasedController(mechanism::Mechanism{T}, Δt = 5e-3) where {T}
         centroidalframe = CartesianFrame3D("centroidal")
         m = mass(mechanism)
         nv = num_velocities(mechanism)
         ρ = zeros(T, 0)
-        result = DynamicsResult(T, mechanism)
+        result = DynamicsResult{T}(mechanism)
         momentummatrix = MomentumMatrix(centroidalframe, Matrix{T}(3, nv), Matrix{T}(3, nv))
         wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, 0), Matrix{T}(3, 0))
         rootframe = root_frame(mechanism)
-        externalwrenches = RigidBodyDynamics.BodyDict(b => zero(Wrench{T}, rootframe) for b in bodies(mechanism))
+        externalwrenches = RigidBodyDynamics.BodyDict{T, Wrench{T}}(b => zero(Wrench{T}, rootframe) for b in bodies(mechanism))
         contactsettings = Vector{ContactSettings{T}}()
         spatialacceltasks = Vector{SpatialAccelerationTask{T}}()
         jointacceltasks = Vector{JointAccelerationTask{T}}()
@@ -50,10 +50,8 @@ type MomentumBasedController{T}
     end
 end
 
-MomentumBasedController{T}(mechanism::Mechanism{T}) = MomentumBasedController{T}(mechanism)
-
-Base.eltype{T}(::Type{MomentumBasedController{T}}) = T
-Base.eltype{T}(controller::MomentumBasedController{T}) = eltype(typeof(controller))
+Base.eltype(::Type{MomentumBasedController{T}}) where {T} = T
+Base.eltype(controller::MomentumBasedController{T}) where {T} = eltype(typeof(controller))
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
 function add_contact!(controller::MomentumBasedController, body::RigidBody, point::Point3D, num_basis_vectors::Int64)
@@ -92,7 +90,7 @@ add!(controller::MomentumBasedController, task::MomentumRateTask) = controller.m
 
 function add_mechanism_joint_accel_tasks!(controller::MomentumBasedController)
     T = eltype(controller)
-    ret = Dict{Joint{T}, JointAccelerationTask{T}}()
+    ret = Dict{GenericJoint{T}, JointAccelerationTask{T}}()
     for joint in tree_joints(controller.mechanism)
         ret[joint] = task = JointAccelerationTask(joint)
         add!(controller, task)
@@ -102,7 +100,7 @@ end
 
 clear_contacts!(controller::MomentumBasedController) = foreach(disable!, controller.contactsettings)
 
-function clear_desireds!{T}(controller::MomentumBasedController{T})
+function clear_desireds!(controller::MomentumBasedController{T}) where {T}
     foreach(disable!, controller.spatialacceltasks)
     foreach(disable!, controller.jointacceltasks)
     controller.momentumratetask = MomentumRateTask(T, controller.centroidalframe)
@@ -185,15 +183,6 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
     end
 end
 
-function velocity_indices(path::TreePath, state::MechanismState)
-    # TODO: inefficient; shouldn't need to be done every tick; not state-dependent:
-    inds = Int64[]
-    for (joint, direction) in path
-        append!(inds, velocity_range(state, joint))
-    end
-    inds
-end
-
 function control(controller::MomentumBasedController, t, controllerstate::MomentumBasedControllerState)
     t < controllerstate.next_control_time - controller.Δt - eps(typeof(t)) && reset!(controllerstate)
     if t >= controllerstate.next_control_time
@@ -253,7 +242,7 @@ function control(controller::MomentumBasedController, t, controllerstate::Moment
                 J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), desired.frame)
                 @framecheck J.frame J̇v.frame
                 @framecheck J.frame desired.frame
-                error = -(SpatialAcceleration(J, view(v̇, velocity_indices(path, state))) + J̇v) + task.desired
+                error = -(SpatialAcceleration(J, v̇) + J̇v) + task.desired
                 angularerror = task.angularselectionmatrix * error.angular
                 linearerror = task.linearselectionmatrix * error.linear
                 if isconstraint(task)

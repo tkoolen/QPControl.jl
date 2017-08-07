@@ -204,7 +204,7 @@ end
     body = val.feet[left]
     base = val.palms[right]
     frame = default_frame(base)
-    task = SpatialAccelerationTask(path(mechanism, base, body), frame, eye(3), eye(3))
+    task = SpatialAccelerationTask(num_velocities(mechanism), path(mechanism, base, body), frame, eye(3), eye(3))
     add!(controller, task)
 
     for weight in [1., Inf]

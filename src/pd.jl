@@ -10,15 +10,15 @@ export
     DoubleGeodesicPDGains,
     pd
 
-@compat abstract type AbstractPDGains{T} end
+abstract type AbstractPDGains{T} end
 
 immutable PDGains{T} <: AbstractPDGains{T}
     k::T
     d::T
 end
-Base.eltype{T}(::Type{PDGains{T}}) = eltype(T)
-Base.convert{T<:PDGains}(::Type{T}, gains::T) = gains
-Base.convert{T<:SMatrix}(::Type{PDGains{T}}, gains::PDGains) = PDGains(convert(T, eye(T) * gains.k), convert(T, eye(T) * gains.d))
+Base.eltype(::Type{PDGains{T}}) where {T} = eltype(T)
+Base.convert(::Type{T}, gains::T) where {T<:PDGains} = gains
+Base.convert(::Type{PDGains{T}}, gains::PDGains) where {T<:SMatrix} = PDGains(convert(T, eye(T) * gains.k), convert(T, eye(T) * gains.d))
 
 immutable DoubleGeodesicPDGains{T<:Number} <: AbstractPDGains{T}
     frame::CartesianFrame3D
