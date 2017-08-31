@@ -144,7 +144,7 @@ controllerstate = MomentumBasedControllerState(state)
             @test isapprox(angularaccel, FreeVector3D(frame_after(val.floatingjoint), zeros(SVector{3})), atol = 1e-6)
             linearaccel = FreeVector3D(baseaccel.frame, baseaccel.linear)
             linearaccel = transform_to_root(state, linearaccel.frame) * linearaccel
-            @test isapprox(linearaccel, mechanism.gravitationalAcceleration; atol = 1e-6)
+            @test isapprox(linearaccel, mechanism.gravitational_acceleration; atol = 1e-6)
         else
             v̇joint = controller.result.v̇[velocity_range(state, joint)]
             @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-6)
@@ -163,7 +163,7 @@ end
         reset!(controllerstate)
 
         # set random active contacts and random achievable wrench
-        fg = world_to_centroidal * (mass(mechanism) * mechanism.gravitationalAcceleration)
+        fg = world_to_centroidal * (mass(mechanism) * mechanism.gravitational_acceleration)
         ḣdes = Wrench(zero(fg), fg)
         for foot in values(val.feet)
             for contactsettings in contacts[foot]

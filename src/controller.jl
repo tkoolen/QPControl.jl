@@ -213,7 +213,7 @@ function control(controller::MomentumBasedController, t, controllerstate::Moment
 
         # Gravitational wrench
         m = controller.mass
-        fg = world_to_centroidal * (m * mechanism.gravitationalAcceleration)
+        fg = world_to_centroidal * (m * mechanism.gravitational_acceleration)
         Wg = Wrench(zero(fg), fg)
 
         # Wrench matrix
