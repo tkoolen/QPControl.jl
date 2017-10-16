@@ -5,6 +5,7 @@ module MomentumBasedControl
 using RigidBodyDynamics
 using RigidBodyDynamics.Graphs
 using RigidBodyDynamics.Contact
+using RigidBodyDynamics.PDControl
 using JuMP
 using StaticArrays
 using Rotations
@@ -38,9 +39,6 @@ export MomentumBasedController,
     num_basis_vectors,
     val_deriv_deriv2
 
-include("pd.jl") # TODO: move to separate package
-
-using .PDControl
 include("contact_settings.jl")
 include("motion_tasks.jl")
 include("controller.jl")

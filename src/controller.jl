@@ -1,5 +1,6 @@
 # TODO: max normal force
 
+# TODO: remove periodic control functionality; use RigidBodySim.PeriodicController
 type MomentumBasedControllerState{T<:Number, S<:MechanismState}
     next_control_time::T
     τ::Vector{T}
