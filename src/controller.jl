@@ -1,22 +1,7 @@
 # TODO: max normal force
 
-# TODO: remove periodic control functionality; use RigidBodySim.PeriodicController
-type MomentumBasedControllerState{T<:Number, S<:MechanismState}
-    next_control_time::T
-    τ::Vector{T}
-    mechstate::S
-end
-
-function MomentumBasedControllerState(mechstate::MechanismState)
-    τ = fill(NaN, num_velocities(mechstate))
-    MomentumBasedControllerState(-Inf, τ, mechstate)
-end
-
-reset!(state::MomentumBasedControllerState) = (state.next_control_time = -Inf)
-
-type MomentumBasedController{T}
+mutable struct MomentumBasedController{T}
     mechanism::Mechanism{T}
-    Δt::T
     centroidalframe::CartesianFrame3D
     mass::T
 
@@ -31,7 +16,7 @@ type MomentumBasedController{T}
     jointacceltasks::Vector{JointAccelerationTask{T}}
     momentumratetask::MomentumRateTask{T}
 
-    function MomentumBasedController(mechanism::Mechanism{T}, Δt = 5e-3) where {T}
+    function MomentumBasedController(mechanism::Mechanism{T}) where {T}
         centroidalframe = CartesianFrame3D("centroidal")
         m = mass(mechanism)
         nv = num_velocities(mechanism)
@@ -46,7 +31,7 @@ type MomentumBasedController{T}
         jointacceltasks = Vector{JointAccelerationTask{T}}()
         momentumratetask = MomentumRateTask(T, centroidalframe)
 
-        new{T}(mechanism, Δt, centroidalframe, m, ρ, result, momentummatrix, wrenchmatrix, externalwrenches,
+        new{T}(mechanism, centroidalframe, m, ρ, result, momentummatrix, wrenchmatrix, externalwrenches,
             contactsettings, spatialacceltasks, jointacceltasks, momentumratetask)
     end
 end
@@ -184,126 +169,119 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
     end
 end
 
-function control(controller::MomentumBasedController, t, controllerstate::MomentumBasedControllerState)
-    t < controllerstate.next_control_time - controller.Δt - eps(typeof(t)) && reset!(controllerstate)
-    if t >= controllerstate.next_control_time
-        controllerstate.next_control_time = t + controller.Δt
-        state = controllerstate.mechstate
+function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, state::MechanismState)
+    T = eltype(controller)
+    mechanism = controller.mechanism
+    nv = num_velocities(state)
+    nρ = length(controller.ρ)
 
-        T = eltype(controller)
-        mechanism = controller.mechanism
-        nv = num_velocities(state)
-        nρ = length(controller.ρ)
+    # Create model
+    solver = Gurobi.GurobiSolver()
+    Gurobi.setparameters!(solver, Silent = true)
+    model = Model(solver = solver)
+    @variable(model, v̇[1 : nv])
+    @variable(model, ρ[1 : nρ] >= 0)
 
-        # Create model
-        solver = Gurobi.GurobiSolver()
-        Gurobi.setparameters!(solver, Silent = true)
-        model = Model(solver = solver)
-        @variable(model, v̇[1 : nv])
-        @variable(model, ρ[1 : nρ] >= 0)
+    # Compute centroidal frame transform
+    com = center_of_mass(state)
+    centroidal_to_world = Transform3D(controller.centroidalframe, com.frame, com.v)
+    world_to_centroidal = inv(centroidal_to_world)
 
-        # Compute centroidal frame transform
-        com = center_of_mass(state)
-        centroidal_to_world = Transform3D(controller.centroidalframe, com.frame, com.v)
-        world_to_centroidal = inv(centroidal_to_world)
+    # Momentum-related quantities
+    A = controller.momentummatrix
+    momentum_matrix!(A, state, world_to_centroidal)
+    Ȧv = transform(momentum_rate_bias(state), world_to_centroidal)
 
-        # Momentum-related quantities
-        A = controller.momentummatrix
-        momentum_matrix!(A, state, world_to_centroidal)
-        Ȧv = transform(momentum_rate_bias(state), world_to_centroidal)
+    # Gravitational wrench
+    m = controller.mass
+    fg = world_to_centroidal * (m * mechanism.gravitational_acceleration)
+    Wg = Wrench(zero(fg), fg)
 
-        # Gravitational wrench
-        m = controller.mass
-        fg = world_to_centroidal * (m * mechanism.gravitational_acceleration)
-        Wg = Wrench(zero(fg), fg)
+    # Wrench matrix
+    update_wrench_matrix!(controller, state, world_to_centroidal)
+    Q = controller.wrenchmatrix
 
-        # Wrench matrix
-        update_wrench_matrix!(controller, state, world_to_centroidal)
-        Q = controller.wrenchmatrix
+    # Newton; TODO: add external wrenches to compensate for
+    @framecheck A.frame Ȧv.frame
+    @framecheck A.frame Wg.frame
+    @framecheck A.frame Q.frame
+    @constraint(model, A.angular * v̇ + Ȧv.angular .== Wg.angular + Q.angular * ρ)
+    @constraint(model, A.linear * v̇ + Ȧv.linear .== Wg.linear + Q.linear * ρ)
 
-        # Newton; TODO: add external wrenches to compensate for
-        @framecheck A.frame Ȧv.frame
-        @framecheck A.frame Wg.frame
-        @framecheck A.frame Q.frame
-        @constraint(model, A.angular * v̇ + Ȧv.angular .== Wg.angular + Q.angular * ρ)
-        @constraint(model, A.linear * v̇ + Ȧv.linear .== Wg.linear + Q.linear * ρ)
+    # Initialize objective
+    obj = zero(JuMP.GenericQuadExpr{T,JuMP.Variable})
 
-        # Initialize objective
-        obj = zero(JuMP.GenericQuadExpr{T,JuMP.Variable})
-
-        # TODO: warm-start-enabled version of the following
-        # Handle desired spatial accelerations
-        for task in controller.spatialacceltasks
-            if isenabled(task)
-                J = task.jacobian
-                desired = task.desired
-                path = task.path
-                world_to_desired = inv(transform_to_root(state, desired.frame))
-                geometric_jacobian!(J, state, path, world_to_desired)
-                J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), desired.frame)
-                @framecheck J.frame J̇v.frame
-                @framecheck J.frame desired.frame
-                error = -(SpatialAcceleration(J, v̇) + J̇v) + task.desired
-                angularerror = task.angularselectionmatrix * error.angular
-                linearerror = task.linearselectionmatrix * error.linear
-                if isconstraint(task)
-                    @constraint(model, angularerror .== 0)
-                    @constraint(model, linearerror .== 0)
-                else
-                    obj += task.weight * (dot(angularerror, angularerror) + dot(linearerror, linearerror))
-                end
-            end
-        end
-
-        # Handle desired joint accelerations
-        for task in controller.jointacceltasks
-            if isenabled(task)
-                joint = task.joint
-                vrange = velocity_range(state, joint)
-                error = task.desired - view(v̇, vrange)
-                if isconstraint(task)
-                    @constraint(model, error .== 0)
-                else
-                    obj += task.weight * dot(error, error)
-                end
-            end
-        end
-
-        # Handle desired momentum rate.
-        momentumratetask = controller.momentumratetask
-        if isenabled(momentumratetask)
-            error = momentumratetask.desired - (Wrench(A, v̇) + Ȧv)
-            angularerror = Array(momentumratetask.angularselectionmatrix * error.angular)
-            linearerror = Array(momentumratetask.linearselectionmatrix * error.linear)
-            if isconstraint(momentumratetask)
+    # TODO: warm-start-enabled version of the following
+    # Handle desired spatial accelerations
+    for task in controller.spatialacceltasks
+        if isenabled(task)
+            J = task.jacobian
+            desired = task.desired
+            path = task.path
+            world_to_desired = inv(transform_to_root(state, desired.frame))
+            geometric_jacobian!(J, state, path, world_to_desired)
+            J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), desired.frame)
+            @framecheck J.frame J̇v.frame
+            @framecheck J.frame desired.frame
+            error = -(SpatialAcceleration(J, v̇) + J̇v) + task.desired
+            angularerror = task.angularselectionmatrix * error.angular
+            linearerror = task.linearselectionmatrix * error.linear
+            if isconstraint(task)
                 @constraint(model, angularerror .== 0)
                 @constraint(model, linearerror .== 0)
             else
-                obj += momentumratetask.weight * (dot(angularerror, angularerror) + dot(linearerror, linearerror))
+                obj += task.weight * (dot(angularerror, angularerror) + dot(linearerror, linearerror))
             end
         end
-
-        # Handle contact weights
-        for settings in controller.contactsettings
-            ρcontact = view(ρ, settings.ρrange)
-            obj += settings.weight * dot(ρcontact, ρcontact)
-        end
-
-        @objective(model, Min, obj)
-
-        # Solve
-        status = solve(model)
-
-        # Inverse dynamics
-        controller.ρ .= getvalue(ρ)
-        result = controller.result
-        result.v̇ .= getvalue(v̇)
-        externalwrenches = controller.externalwrenches
-        τ = controllerstate.τ
-        back_out_external_wrenches!(controller)
-        map!(wrench -> transform(wrench, centroidal_to_world), values(externalwrenches), values(externalwrenches))
-        inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, externalwrenches)
     end
 
-    controllerstate.τ
+    # Handle desired joint accelerations
+    for task in controller.jointacceltasks
+        if isenabled(task)
+            joint = task.joint
+            vrange = velocity_range(state, joint)
+            error = task.desired - view(v̇, vrange)
+            if isconstraint(task)
+                @constraint(model, error .== 0)
+            else
+                obj += task.weight * dot(error, error)
+            end
+        end
+    end
+
+    # Handle desired momentum rate.
+    momentumratetask = controller.momentumratetask
+    if isenabled(momentumratetask)
+        error = momentumratetask.desired - (Wrench(A, v̇) + Ȧv)
+        angularerror = Array(momentumratetask.angularselectionmatrix * error.angular)
+        linearerror = Array(momentumratetask.linearselectionmatrix * error.linear)
+        if isconstraint(momentumratetask)
+            @constraint(model, angularerror .== 0)
+            @constraint(model, linearerror .== 0)
+        else
+            obj += momentumratetask.weight * (dot(angularerror, angularerror) + dot(linearerror, linearerror))
+        end
+    end
+
+    # Handle contact weights
+    for settings in controller.contactsettings
+        ρcontact = view(ρ, settings.ρrange)
+        obj += settings.weight * dot(ρcontact, ρcontact)
+    end
+
+    @objective(model, Min, obj)
+
+    # Solve
+    status = solve(model)
+
+    # Inverse dynamics
+    controller.ρ .= getvalue(ρ)
+    result = controller.result
+    result.v̇ .= getvalue(v̇)
+    externalwrenches = controller.externalwrenches
+    back_out_external_wrenches!(controller)
+    map!(wrench -> transform(wrench, centroidal_to_world), values(externalwrenches), values(externalwrenches))
+    inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, externalwrenches)
+
+    τ
 end
