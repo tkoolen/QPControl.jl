@@ -11,17 +11,17 @@ using StaticArrays
 using Rotations
 using Compat
 using ForwardDiff
+import MathProgBase: setparameters!
 import Gurobi
+import OSQP: OSQPMathProgBaseInterface
 
 import RigidBodyDynamics: set!, GenericJoint # TODO
 
 export MomentumBasedController,
-    MomentumBasedControllerState,
     ContactSettings,
     SpatialAccelerationTask,
     JointAccelerationTask,
     MomentumRateTask,
-    centroidal_transform,
     centroidal_frame,
     add_contact!,
     add_contacts!,
@@ -33,7 +33,6 @@ export MomentumBasedController,
     reset!,
     regularize_joint_accels!,
     pd_center_of_mass!,
-    control,
     set!,
     disable!,
     num_basis_vectors,

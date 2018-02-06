@@ -1,4 +1,4 @@
-type ContactSettings{T}
+mutable struct ContactSettings{T}
     body::RigidBody{T}
     point::Point3D{SVector{3, T}}
     weight::T
