@@ -12,7 +12,6 @@ using Rotations
 using Compat
 using ForwardDiff
 import MathProgBase: setparameters!
-import Gurobi
 import OSQP: OSQPMathProgBaseInterface
 
 import RigidBodyDynamics: set!, GenericJoint # TODO

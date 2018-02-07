@@ -2,18 +2,19 @@
 language: julia
 os:
   - linux
-  - osx
+  # - osx
 julia:
-  - release
-  - nightly
+  - 0.6
+  # - nightly
+branches:
+  only:
+    - master
+    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 notifications:
   email: false
 # uncomment the following lines to override the default test script
-#script:
-#  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-#  - julia -e 'Pkg.clone(pwd()); Pkg.build("MomentumBasedControl"); Pkg.test("MomentumBasedControl"; coverage=true)'
+script:
+ - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+ - julia -e 'Pkg.clone("https://github.com/tkoolen/RigidBodySim.jl.git"); Pkg.clone("https://github.com/tkoolen/OSQP.jl.git"); Pkg.checkout("OSQP", "tk/mathprogbase"); Pkg.build("OSQP"); Pkg.clone(pwd()); Pkg.checkout("RigidBodyDynamics"); Pkg.build("MomentumBasedControl"); Pkg.test("MomentumBasedControl"; coverage=true)'
 after_success:
-  # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("MomentumBasedControl")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
-  # push coverage results to Codecov
   - julia -e 'cd(Pkg.dir("MomentumBasedControl")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
