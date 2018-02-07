@@ -176,11 +176,12 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, st
     nρ = length(controller.ρ)
 
     # Create model
-    solver = Gurobi.GurobiSolver()
-    Gurobi.setparameters!(solver, Silent = true)
+    solver = OSQPMathProgBaseInterface.OSQPSolver(eps_abs = 1e-8, eps_rel = 1e-16, max_iter = 10000)
+    setparameters!(solver, Silent = true)
     model = Model(solver = solver)
     @variable(model, v̇[1 : nv])
-    @variable(model, ρ[1 : nρ] >= 0)
+    @variable(model, ρ[1 : nρ])
+    ρcon = @constraint(model, ρ .>= 0)
 
     # Compute centroidal frame transform
     com = center_of_mass(state)
