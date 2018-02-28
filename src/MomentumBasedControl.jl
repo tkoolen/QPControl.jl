@@ -14,7 +14,7 @@ using ForwardDiff
 import MathProgBase: setparameters!
 import OSQP: OSQPMathProgBaseInterface
 
-import RigidBodyDynamics: set!, GenericJoint # TODO
+import RigidBodyDynamics: set! # TODO
 
 export MomentumBasedController,
     ContactSettings,

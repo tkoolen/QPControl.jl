@@ -23,7 +23,8 @@ state = MechanismState(mechanism)
     regularize_joint_accels!(controller, 1.)
     disable!(jointacceltasks[floatingjoint])
     controller(τ, 0., state)
-    accels = Dict{RigidBody{Float64}, SpatialAcceleration{Float64}}()
+    result = DynamicsResult(mechanism)
+    accels = result.accelerations
     spatial_accelerations!(accels, state, controller.result.v̇)
     for joint in tree_joints(mechanism)
         if joint == floatingjoint
@@ -95,7 +96,8 @@ end
     task = SpatialAccelerationTask(num_velocities(mechanism), path(mechanism, base, body), frame, eye(3), eye(3))
     add!(controller, task)
 
-    accels = Dict{RigidBody{Float64}, SpatialAcceleration{Float64}}()
+    result = DynamicsResult(mechanism)
+    accels = result.accelerations
     for weight in [1., Inf]
         reset!(controller)
         if isinf(weight)

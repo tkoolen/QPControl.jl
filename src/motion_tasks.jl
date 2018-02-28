@@ -4,14 +4,14 @@ abstract type MutableMotionTask{T} <: MotionTask{T} end
 
 # SpatialAccelerationTask
 mutable struct SpatialAccelerationTask{T} <: MutableMotionTask{T}
-    path::TreePath{RigidBody{T}, GenericJoint{T}}
+    path::TreePath{RigidBody{T}, Joint{T}}
     jacobian::GeometricJacobian{Matrix{T}}
     desired::SpatialAcceleration{T}
     angularselectionmatrix::Matrix{T}
     linearselectionmatrix::Matrix{T}
     weight::T
 
-    function SpatialAccelerationTask(nv::Int, path::TreePath{RigidBody{T}, GenericJoint{T}}, frame::CartesianFrame3D,
+    function SpatialAccelerationTask(nv::Int, path::TreePath{RigidBody{T}, Joint{T}}, frame::CartesianFrame3D,
             angularselectionmatrix::Matrix{T}, linearselectionmatrix::Matrix{T}) where {T}
         @assert size(angularselectionmatrix, 2) == 3
         @assert size(linearselectionmatrix, 2) == 3
@@ -37,11 +37,11 @@ RigidBodyDynamics.zero!(task::SpatialAccelerationTask, weight::Number) = set!(ta
 
 # JointAccelerationTask
 mutable struct JointAccelerationTask{T} <: MutableMotionTask{T}
-    joint::GenericJoint{T}
+    joint::Joint{T}
     desired::Vector{T}
     weight::T
 
-    JointAccelerationTask(joint::GenericJoint{T}) where {T} = new{T}(joint, zeros(T, num_velocities(joint)), zero(T))
+    JointAccelerationTask(joint::Joint{T}) where {T} = new{T}(joint, zeros(T, num_velocities(joint)), zero(T))
 end
 
 function set!(task::JointAccelerationTask, desired::Union{Number, AbstractVector}, weight::Number)
