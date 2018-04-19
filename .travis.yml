@@ -12,9 +12,12 @@ branches:
     - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 notifications:
   email: false
-# uncomment the following lines to override the default test script
+addons:
+  apt:
+    packages:
+    - libzmq3
 script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- - julia -e 'Pkg.clone("https://github.com/tkoolen/RigidBodySim.jl.git"); Pkg.clone("https://github.com/tkoolen/OSQP.jl.git"); Pkg.checkout("OSQP", "tk/mathprogbase"); Pkg.build("OSQP"); Pkg.clone(pwd()); Pkg.checkout("RigidBodyDynamics"); Pkg.build("MomentumBasedControl"); Pkg.test("MomentumBasedControl"; coverage=true)'
+ - julia -e 'Pkg.clone(pwd()); Pkg.checkout("RigidBodyDynamics"); Pkg.checkout("RigidBodyTreeInspector"); Pkg.checkout("RigidBodySim"); Pkg.build("MomentumBasedControl"); Pkg.test("MomentumBasedControl"; coverage=true)'
 after_success:
   - julia -e 'cd(Pkg.dir("MomentumBasedControl")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'

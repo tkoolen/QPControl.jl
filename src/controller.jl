@@ -10,7 +10,7 @@ mutable struct MomentumBasedController{T}
     result::DynamicsResult{T, T}
     momentummatrix::MomentumMatrix{Matrix{T}}
     wrenchmatrix::WrenchMatrix{Matrix{T}}
-    externalwrenches::RigidBodyDynamics.BodyDict{T, Wrench{T}}
+    externalwrenches::BodyDict{Wrench{T}}
     contactsettings::Vector{ContactSettings{T}}
     spatialacceltasks::Vector{SpatialAccelerationTask{T}}
     jointacceltasks::Vector{JointAccelerationTask{T}}
@@ -25,7 +25,7 @@ mutable struct MomentumBasedController{T}
         momentummatrix = MomentumMatrix(centroidalframe, Matrix{T}(3, nv), Matrix{T}(3, nv))
         wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, 0), Matrix{T}(3, 0))
         rootframe = root_frame(mechanism)
-        externalwrenches = RigidBodyDynamics.BodyDict{T, Wrench{T}}(b => zero(Wrench{T}, rootframe) for b in bodies(mechanism))
+        externalwrenches = BodyDict{Wrench{T}}(BodyID(b) => zero(Wrench{T}, rootframe) for b in bodies(mechanism))
         contactsettings = Vector{ContactSettings{T}}()
         spatialacceltasks = Vector{SpatialAccelerationTask{T}}()
         jointacceltasks = Vector{JointAccelerationTask{T}}()
@@ -76,7 +76,7 @@ add!(controller::MomentumBasedController, task::MomentumRateTask) = controller.m
 
 function add_mechanism_joint_accel_tasks!(controller::MomentumBasedController)
     T = eltype(controller)
-    ret = Dict{GenericJoint{T}, JointAccelerationTask{T}}()
+    ret = Dict{Joint{T}, JointAccelerationTask{T}}()
     for joint in tree_joints(controller.mechanism)
         ret[joint] = task = JointAccelerationTask(joint)
         add!(controller, task)
