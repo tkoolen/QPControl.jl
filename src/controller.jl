@@ -1,60 +1,67 @@
 # TODO: max normal force
 
-mutable struct MomentumBasedController{T}
-    mechanism::Mechanism{T}
+mutable struct MomentumBasedController
+    # dynamics-related
+    mechanism::Mechanism{Float64} # TODO: possibly remove
     centroidalframe::CartesianFrame3D
-    mass::T
+    mass::Float64
+    result::DynamicsResult{Float64, Float64}
+    momentummatrix::MomentumMatrix{Matrix{Float64}}
+    wrenchmatrix::WrenchMatrix{Matrix{Float64}}
 
-    # Cache variables and tasks. TODO: consider moving these to state
-    ρ::Vector{T}
-    result::DynamicsResult{T, T}
-    momentummatrix::MomentumMatrix{Matrix{T}}
-    wrenchmatrix::WrenchMatrix{Matrix{T}}
-    externalwrenches::BodyDict{Wrench{T}}
-    contactsettings::Vector{ContactSettings{T}}
-    spatialacceltasks::Vector{SpatialAccelerationTask{T}}
-    jointacceltasks::Vector{JointAccelerationTask{T}}
-    momentumratetask::MomentumRateTask{T}
+    # contact info and motion tasks
+    externalwrenches::BodyDict{Wrench{Float64}}
+    contactsettings::Vector{ContactSettings}
+    spatialacceltasks::Vector{SpatialAccelerationTask}
+    jointacceltasks::Vector{JointAccelerationTask}
+    momentumratetask::MomentumRateTask
 
-    function MomentumBasedController(mechanism::Mechanism{T}) where {T}
-        centroidalframe = CartesianFrame3D("centroidal")
-        m = mass(mechanism)
+    # qp-related
+    ρ::Vector{Float64}
+
+    function MomentumBasedController(mechanism::Mechanism{Float64})
         nv = num_velocities(mechanism)
-        ρ = zeros(T, 0)
-        result = DynamicsResult{T}(mechanism)
-        momentummatrix = MomentumMatrix(centroidalframe, Matrix{T}(3, nv), Matrix{T}(3, nv))
-        wrenchmatrix = WrenchMatrix(centroidalframe, Matrix{T}(3, 0), Matrix{T}(3, 0))
-        rootframe = root_frame(mechanism)
-        externalwrenches = BodyDict{Wrench{T}}(BodyID(b) => zero(Wrench{T}, rootframe) for b in bodies(mechanism))
-        contactsettings = Vector{ContactSettings{T}}()
-        spatialacceltasks = Vector{SpatialAccelerationTask{T}}()
-        jointacceltasks = Vector{JointAccelerationTask{T}}()
-        momentumratetask = MomentumRateTask(T, centroidalframe)
 
-        new{T}(mechanism, centroidalframe, m, ρ, result, momentummatrix, wrenchmatrix, externalwrenches,
-            contactsettings, spatialacceltasks, jointacceltasks, momentumratetask)
+        # dynamics-related
+        centroidalframe = CartesianFrame3D("centroidal")
+        totalmass = mass(mechanism)
+        result = DynamicsResult(mechanism)
+        momentummatrix = MomentumMatrix(centroidalframe, zeros(3, nv), zeros(3, nv))
+        wrenchmatrix = WrenchMatrix(centroidalframe, zeros(3, 0), zeros(3, 0))
+
+        # contact info and motion tasks
+        rootframe = root_frame(mechanism)
+        externalwrenches = BodyDict{Wrench{Float64}}(BodyID(b) => zero(Wrench{Float64}, rootframe) for b in bodies(mechanism))
+        contactsettings = Vector{ContactSettings}()
+        spatialacceltasks = Vector{SpatialAccelerationTask}()
+        jointacceltasks = Vector{JointAccelerationTask}()
+        momentumratetask = MomentumRateTask(centroidalframe)
+
+        # qp-related
+        ρ = Vector{Float64}()
+
+        new(
+            mechanism, centroidalframe, totalmass, result, momentummatrix, wrenchmatrix,
+            externalwrenches, contactsettings, spatialacceltasks, jointacceltasks, momentumratetask,
+            ρ)
     end
 end
 
-Base.eltype(::Type{MomentumBasedController{T}}) where {T} = T
-Base.eltype(controller::MomentumBasedController{T}) where {T} = eltype(typeof(controller))
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
 function add_contact!(controller::MomentumBasedController, body::RigidBody, point::Point3D, num_basis_vectors::Int64)
-    T = eltype(controller)
     nρ = length(controller.ρ)
     nρnew = nρ + num_basis_vectors
     ρrange = nρ + 1 : nρnew
     settings = ContactSettings(body, point, ρrange)
     push!(controller.contactsettings, settings)
     resize!(controller.ρ, nρnew)
-    controller.wrenchmatrix = WrenchMatrix(controller.centroidalframe, Matrix{T}(3, nρnew), Matrix{T}(3, nρnew))
+    controller.wrenchmatrix = WrenchMatrix(controller.centroidalframe, zeros(3, nρnew), zeros(3, nρnew))
     settings
 end
 
 function add_contacts!(controller::MomentumBasedController, body::RigidBody, num_basis_vectors::Int64)
-    T = eltype(controller)
-    ret = Vector{ContactSettings{T}}()
+    ret = Vector{ContactSettings}()
     for point in contact_points(body)
         push!(ret, add_contact!(controller, body, RigidBodyDynamics.Contact.location(point), num_basis_vectors))
     end
@@ -62,8 +69,7 @@ function add_contacts!(controller::MomentumBasedController, body::RigidBody, num
 end
 
 function add_mechanism_contacts!(controller::MomentumBasedController, num_basis_vectors::Int64 = 4)
-    T = eltype(controller)
-    ret = Dict{RigidBody{T}, Vector{ContactSettings{T}}}()
+    ret = Dict{RigidBody{Float64}, Vector{ContactSettings}}() # TODO: BodyIDDict
     for body in bodies(controller.mechanism)
         ret[body] = add_contacts!(controller, body, num_basis_vectors)
     end
@@ -75,8 +81,7 @@ add!(controller::MomentumBasedController, task::JointAccelerationTask) = push!(c
 add!(controller::MomentumBasedController, task::MomentumRateTask) = controller.momentumratetask = task
 
 function add_mechanism_joint_accel_tasks!(controller::MomentumBasedController)
-    T = eltype(controller)
-    ret = Dict{Joint{T}, JointAccelerationTask{T}}()
+    ret = Dict{Joint{Float64}, JointAccelerationTask}() # TODO: JointIDDict
     for joint in tree_joints(controller.mechanism)
         ret[joint] = task = JointAccelerationTask(joint)
         add!(controller, task)
@@ -86,10 +91,10 @@ end
 
 clear_contacts!(controller::MomentumBasedController) = foreach(disable!, controller.contactsettings)
 
-function clear_desireds!(controller::MomentumBasedController{T}) where {T}
+function clear_desireds!(controller::MomentumBasedController)
     foreach(disable!, controller.spatialacceltasks)
     foreach(disable!, controller.jointacceltasks)
-    controller.momentumratetask = MomentumRateTask(T, controller.centroidalframe)
+    controller.momentumratetask = MomentumRateTask(controller.centroidalframe)
 end
 
 reset!(controller::MomentumBasedController) = (clear_contacts!(controller); clear_desireds!(controller))
@@ -124,7 +129,6 @@ function update_wrench_matrix!(controller::MomentumBasedController, state::Mecha
     Q = controller.wrenchmatrix
     @framecheck Q.frame world_to_centroidal.to
     rootframe = world_to_centroidal.from
-    T = eltype(typeof(Q))
     for settings in controller.contactsettings
         ρrange = settings.ρrange
         if isenabled(settings)
@@ -137,7 +141,7 @@ function update_wrench_matrix!(controller::MomentumBasedController, state::Mecha
             Δθ = 2 * π / length(ρrange)
             for i = 1 : length(ρrange)
                 θ = (i - 1) * Δθ
-                β = FreeVector3D(n.frame, rot * normalize(SVector(μ * cos(θ), μ * sin(θ), one(T))))
+                β = FreeVector3D(n.frame, rot * normalize(SVector(μ * cos(θ), μ * sin(θ), 1.0)))
                 Qcol = Wrench(r, β)
                 @framecheck Q.frame Qcol.frame
                 view(Q.angular, :, ρrange[i])[:] = Qcol.angular
@@ -154,9 +158,8 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
     Q = controller.wrenchmatrix
     ρ = controller.ρ
     externalwrenches = controller.externalwrenches
-    T = eltype(controller)
     for body in keys(externalwrenches)
-        externalwrenches[body] = zero(Wrench{T}, Q.frame)
+        externalwrenches[body] = zero(Wrench{Float64}, Q.frame)
     end
     for settings in controller.contactsettings
         body = settings.body
@@ -170,7 +173,6 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
 end
 
 function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, state::MechanismState)
-    T = eltype(controller)
     mechanism = controller.mechanism
     nv = num_velocities(state)
     nρ = length(controller.ρ)
@@ -210,7 +212,7 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, st
     @constraint(model, A.linear * v̇ + Ȧv.linear .== Wg.linear + Q.linear * ρ)
 
     # Initialize objective
-    obj = zero(JuMP.GenericQuadExpr{T,JuMP.Variable})
+    obj = zero(JuMP.GenericQuadExpr{Float64,JuMP.Variable})
 
     # TODO: warm-start-enabled version of the following
     # Handle desired spatial accelerations
