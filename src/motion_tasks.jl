@@ -1,26 +1,26 @@
-abstract type MotionTask{T} end
-abstract type MutableMotionTask{T} <: MotionTask{T} end
+abstract type MotionTask end
+abstract type MutableMotionTask <: MotionTask end # TODO: get rid of this distinction; make all MotionTasks mutable
 
 
 # SpatialAccelerationTask
-mutable struct SpatialAccelerationTask{T} <: MutableMotionTask{T}
-    path::TreePath{RigidBody{T}, Joint{T}}
-    jacobian::GeometricJacobian{Matrix{T}}
-    desired::SpatialAcceleration{T}
-    angularselectionmatrix::Matrix{T}
-    linearselectionmatrix::Matrix{T}
-    weight::T
+mutable struct SpatialAccelerationTask <: MutableMotionTask
+    path::TreePath{RigidBody{Float64}, Joint{Float64}} # TODO
+    jacobian::GeometricJacobian{Matrix{Float64}}
+    desired::SpatialAcceleration{Float64}
+    angularselectionmatrix::Matrix{Float64}
+    linearselectionmatrix::Matrix{Float64}
+    weight::Float64
 
-    function SpatialAccelerationTask(nv::Int, path::TreePath{RigidBody{T}, Joint{T}}, frame::CartesianFrame3D,
-            angularselectionmatrix::Matrix{T}, linearselectionmatrix::Matrix{T}) where {T}
+    function SpatialAccelerationTask(nv::Int, path::TreePath{RigidBody{Float64}, Joint{Float64}}, frame::CartesianFrame3D,
+            angularselectionmatrix::Matrix{Float64}, linearselectionmatrix::Matrix{Float64})
         @assert size(angularselectionmatrix, 2) == 3
         @assert size(linearselectionmatrix, 2) == 3
         bodyframe = default_frame(target(path))
         baseframe = default_frame(source(path))
-        jacobian = GeometricJacobian(bodyframe, baseframe, frame, Matrix{T}(3, nv), Matrix{T}(3, nv))
-        desired = zero(SpatialAcceleration{T}, bodyframe, baseframe, frame)
-        weight = zero(T)
-        new{T}(path, jacobian, desired, angularselectionmatrix, linearselectionmatrix, weight)
+        jacobian = GeometricJacobian(bodyframe, baseframe, frame, zeros(3, nv), zeros(3, nv))
+        desired = zero(SpatialAcceleration{Float64}, bodyframe, baseframe, frame)
+        weight = 0.0
+        new(path, jacobian, desired, angularselectionmatrix, linearselectionmatrix, weight)
     end
 end
 
@@ -36,12 +36,12 @@ end
 RigidBodyDynamics.zero!(task::SpatialAccelerationTask, weight::Number) = set!(task, zero(task.desired), weight)
 
 # JointAccelerationTask
-mutable struct JointAccelerationTask{T} <: MutableMotionTask{T}
-    joint::Joint{T}
-    desired::Vector{T}
-    weight::T
+mutable struct JointAccelerationTask <: MutableMotionTask
+    joint::Joint{Float64}
+    desired::Vector{Float64}
+    weight::Float64
 
-    JointAccelerationTask(joint::Joint{T}) where {T} = new{T}(joint, zeros(T, num_velocities(joint)), zero(T))
+    JointAccelerationTask(joint::Joint{Float64}) = new(joint, zeros(num_velocities(joint)), 0.0)
 end
 
 function set!(task::JointAccelerationTask, desired::Union{Number, AbstractVector}, weight::Number)
@@ -52,14 +52,14 @@ end
 
 
 # MomentumRateTask
-struct MomentumRateTask{T} <: MotionTask{T}
-    desired::Wrench{T}
-    angularselectionmatrix::SMatrix{3, 3, T, 9}
-    linearselectionmatrix::SMatrix{3, 3, T, 9}
-    weight::T
+struct MomentumRateTask <: MotionTask
+    desired::Wrench{Float64}
+    angularselectionmatrix::SMatrix{3, 3, Float64, 9}
+    linearselectionmatrix::SMatrix{3, 3, Float64, 9}
+    weight::Float64
 end
 
-MomentumRateTask(::Type{T}, frame::CartesianFrame3D) where {T} = MomentumRateTask(zero(Wrench{T}, frame), eye(SMatrix{3, 3}), eye(SMatrix{3, 3}), T(0))
+MomentumRateTask(frame::CartesianFrame3D) = MomentumRateTask(zero(Wrench{Float64}, frame), eye(SMatrix{3, 3}), eye(SMatrix{3, 3}), 0.0)
 
 disable!(task::MutableMotionTask) = task.weight = 0
 isenabled(task::MotionTask) = task.weight > 0
