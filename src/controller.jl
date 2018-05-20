@@ -1,6 +1,7 @@
 # TODO: max normal force
 
-mutable struct MomentumBasedController
+
+struct MomentumBasedController{O<:MOI.AbstractOptimizer, M}
     # dynamics-related
     mechanism::Mechanism{Float64} # TODO: possibly remove
     centroidalframe::CartesianFrame3D
@@ -10,16 +11,15 @@ mutable struct MomentumBasedController
     wrenchmatrix::WrenchMatrix{Matrix{Float64}}
 
     # contact info and motion tasks
-    externalwrenches::BodyDict{Wrench{Float64}}
+    externalwrenches::Dict{RigidBody{Float64}, Wrench{Float64}}
     contactsettings::Vector{ContactSettings}
-    spatialacceltasks::Vector{SpatialAccelerationTask}
-    jointacceltasks::Vector{JointAccelerationTask}
-    momentumratetask::MomentumRateTask
+    motiontasks::M
 
     # qp-related
-    ρ::Vector{Float64}
+    qpmodel::SimpleQP.Model{O}
 
-    function MomentumBasedController(mechanism::Mechanism{Float64})
+    function MomentumBasedController(
+            mechanism::Mechanism{Float64}, optimizer::O, motiontasks::M) where {O<:MOI.AbstractOptimizer, M}
         nv = num_velocities(mechanism)
 
         # dynamics-related
@@ -33,18 +33,21 @@ mutable struct MomentumBasedController
         rootframe = root_frame(mechanism)
         externalwrenches = BodyDict{Wrench{Float64}}(BodyID(b) => zero(Wrench{Float64}, rootframe) for b in bodies(mechanism))
         contactsettings = Vector{ContactSettings}()
-        spatialacceltasks = Vector{SpatialAccelerationTask}()
-        jointacceltasks = Vector{JointAccelerationTask}()
-        momentumratetask = MomentumRateTask(centroidalframe)
+
 
         # qp-related
+        qpmodel = SimpleQP.Model(optimizer)
         ρ = Vector{Float64}()
 
-        new(
+        new{O}(
             mechanism, centroidalframe, totalmass, result, momentummatrix, wrenchmatrix,
             externalwrenches, contactsettings, spatialacceltasks, jointacceltasks, momentumratetask,
-            ρ)
+            qpmodel, ρ)
     end
+end
+
+function MomentumBasedController(mechanism::Mechanism{Float64}, optimizer, spec::ControllerSpecification)
+
 end
 
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
@@ -105,25 +108,25 @@ function regularize_joint_accels!(controller::MomentumBasedController, weight)
     end
 end
 
-function pd_center_of_mass!(controller::MomentumBasedController, gains::PDGains, state::MechanismState,
-        desired_com::Point3D, desired_com_velocity::FreeVector3D, weight::Number)
-    m = controller.mass
-    c = center_of_mass(state)
-    world_to_centroidal = Transform3D(c.frame, centroidal_frame(controller), -c.v)
-    h = transform(momentum(state), world_to_centroidal)
+# function pd_center_of_mass!(controller::MomentumBasedController, gains::PDGains, state::MechanismState,
+#         desired_com::Point3D, desired_com_velocity::FreeVector3D, weight::Number)
+#     m = controller.mass
+#     c = center_of_mass(state)
+#     world_to_centroidal = Transform3D(c.frame, centroidal_frame(controller), -c.v)
+#     h = transform(momentum(state), world_to_centroidal)
 
-    cdes = world_to_centroidal * transform(state, desired_com, world_to_centroidal.from)
-    ċdes = world_to_centroidal * transform(state, desired_com_velocity, world_to_centroidal.from)
+#     cdes = world_to_centroidal * transform(state, desired_com, world_to_centroidal.from)
+#     ċdes = world_to_centroidal * transform(state, desired_com_velocity, world_to_centroidal.from)
 
-    c = Point3D(centroidal_frame(controller), zero(c.v))
-    ċ = FreeVector3D(h.frame, h.linear / m)
+#     c = Point3D(centroidal_frame(controller), zero(c.v))
+#     ċ = FreeVector3D(h.frame, h.linear / m)
 
-    c̈des = pd(gains, c, cdes, ċ, ċdes)
-    linear_momentum_rate_des = m * c̈des
+#     c̈des = pd(gains, c, cdes, ċ, ċdes)
+#     linear_momentum_rate_des = m * c̈des
 
-    momentum_rate_des = Wrench(zero(linear_momentum_rate_des), linear_momentum_rate_des)
-    add!(controller, MomentumRateTask(momentum_rate_des, zero(SMatrix{3, 3}), eye(SMatrix{3, 3}), weight))
-end
+#     momentum_rate_des = Wrench(zero(linear_momentum_rate_des), linear_momentum_rate_des)
+#     add!(controller, MomentumRateTask(momentum_rate_des, zero(SMatrix{3, 3}), eye(SMatrix{3, 3}), weight))
+# end
 
 function update_wrench_matrix!(controller::MomentumBasedController, state::MechanismState, world_to_centroidal::Transform3D)
     Q = controller.wrenchmatrix
@@ -172,6 +175,14 @@ function back_out_external_wrenches!(controller::MomentumBasedController)
     end
 end
 
+function initialize!(controller::MomentumBasedController)
+    mechanism = controller.mechanism
+    nv = num_velocities(state)
+    nρ = length(controller.ρ)
+
+
+end
+
 function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, state::MechanismState)
     mechanism = controller.mechanism
     nv = num_velocities(state)
@@ -180,7 +191,7 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, st
     # Create model
     solver = OSQPMathProgBaseInterface.OSQPSolver(eps_abs = 1e-8, eps_rel = 1e-16, max_iter = 10000)
     setparameters!(solver, Silent = true)
-    model = Model(solver = solver)
+    model = JuMP.Model(solver = solver)
     @variable(model, v̇[1 : nv])
     @variable(model, ρ[1 : nρ])
     ρcon = @constraint(model, ρ .>= 0)

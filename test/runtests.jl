@@ -1,3 +1,5 @@
+module MomentumBasedControlTests
+
 using MomentumBasedControl
 using RigidBodyDynamics
 using RigidBodyDynamics.OdeIntegrators
@@ -6,17 +8,28 @@ using ValkyrieRobot
 using StaticArrays
 using Rotations
 using Base.Test
+using OSQP.MathOptInterfaceOSQP
 
-val = Valkyrie()
-mechanism = val.mechanism
-floatingjoint = val.basejoint
-controller = MomentumBasedController(mechanism)
-contacts = add_mechanism_contacts!(controller)
-jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
-state = MechanismState(mechanism)
-τ = similar(velocity(state))
+function defaultoptimizer()
+    optimizer = OSQPOptimizer()
+    MOI.set!(optimizer, OSQPSettings.Verbose(), false)
+    MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
+    MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
+    MOI.set!(optimizer, OSQPSettings.MaxIter(), 10000)
+    MOI.set!(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
+    optimizer
+end
 
 @testset "zero velocity free fall" begin
+    val = Valkyrie()
+    mechanism = val.mechanism
+    floatingjoint = val.basejoint
+    controller = MomentumBasedController(mechanism, defaultoptimizer())
+    contacts = add_mechanism_contacts!(controller)
+    jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
+    state = MechanismState(mechanism)
+    τ = similar(velocity(state))
+
     srand(5354)
     zero!(state)
     rand_configuration!(state)
@@ -43,6 +56,15 @@ state = MechanismState(mechanism)
 end
 
 @testset "achievable momentum rate" begin
+    val = Valkyrie()
+    mechanism = val.mechanism
+    floatingjoint = val.basejoint
+    controller = MomentumBasedController(mechanism, defaultoptimizer())
+    contacts = add_mechanism_contacts!(controller)
+    jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
+    state = MechanismState(mechanism)
+    τ = similar(velocity(state))
+
     srand(1)
     for p in linspace(0., 1., 5)
         rand!(state)
@@ -87,9 +109,15 @@ end
 end
 
 @testset "spatial acceleration" begin
+    val = Valkyrie()
+    mechanism = val.mechanism
+    floatingjoint = val.basejoint
+    state = MechanismState(mechanism)
+    τ = similar(velocity(state))
+
     srand(533)
     rand!(state)
-    controller = MomentumBasedController(mechanism)
+    controller = MomentumBasedController(mechanism, defaultoptimizer())
     body = val.feet[left]
     base = val.palms[right]
     frame = default_frame(base)
@@ -115,18 +143,22 @@ end
 end
 
 # notebooks
-@testset "example notebooks" begin
-    using NBInclude
-    notebookdir = Pkg.dir("MomentumBasedControl", "notebooks")
-    for file in readdir(notebookdir)
-        name, ext = splitext(file)
-        if lowercase(ext) == ".ipynb"
-            @testset "$name" begin
-                println("Testing $name.")
-                let
-                    nbinclude(joinpath(notebookdir, file), regex = r"^((?!\#NBSKIP).)*$"s)
-                end
-            end
-        end
-    end
-end
+# @testset "example notebooks" begin
+#     using NBInclude
+#     notebookdir = joinpath(@__DIR__, "..", "notebooks")
+#     for file in readdir(notebookdir)
+#         path = joinpath(notebookdir, file)
+#         path in excludes && continue
+#         name, ext = splitext(file)
+#         lowercase(ext) == ".ipynb" || continue
+#         @eval module $(gensym()) # Each notebook is run in its own module.
+#         using Base.Test
+#         using NBInclude
+#         @testset "$($name)" begin
+#             nbinclude($path, regex = r"^((?!\#NBSKIP).)*$"s) # Use #NBSKIP in a cell to skip it during tests.
+#         end
+#         end # module
+#     end
+# end
+
+end # module
