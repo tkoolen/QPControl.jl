@@ -44,7 +44,7 @@ isenabled(settings::ContactSettings) = settings.maxnormalforce > 0
 wrenchbasis(settings::ContactSettings) = settings.wrenchbasis
 
 function update_wrench_basis!(settings::ContactSettings{N}, body_to_centroidal::Transform3D) where N
-    basis = transform(wrenchbasis(settings.contactinfo), body_to_centroidal)
+    basis = transform(wrenchbasis(settings.contactinfo, Val(N)), body_to_centroidal)
     @framecheck basis.frame settings.wrenchbasis.frame
     copyto!(settings.wrenchbasis.angular, basis.angular)
     copyto!(settings.wrenchbasis.linear, basis.linear)

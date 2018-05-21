@@ -1,102 +1,90 @@
-abstract type MotionTask end
+abstract type AbstractMotionTask end
 
-const ContiguousRowView{T} = SubArray{T,2,Array{T,2},Tuple{UnitRange{Int64},Base.Slice{Base.OneTo{Int64}}},false}
+function set_task_vector!(dest::Vector, src::Union{<:SpatialAcceleration, <:Wrench}, task)
+    angularrows = task.angularrows
+    linearrows = task.linearrows
+    copyto!(dest, 1, angular(src), first(angularrows), last(angularrows))
+    copyto!(dest, length(angularrows) + 1, linear(src), first(linearrows), last(linearrows))
+end
 
-struct SpatialAccelerationTask <: MotionTask
+function set_task_matrix!(dest::Matrix, src::Union{<:GeometricJacobian, <:MomentumMatrix}, task)
+    srcang = angular(src)
+    srclin = linear(src)
+    angularrows = task.angularrows
+    linearrows = task.linearrows
+    destindex = 1
+    @inbounds for col = 1 : size(dest, 2)
+        for srcrow in angularrows
+            dest[destindex] = srcang[srcrow, col]
+            destindex += 1
+        end
+        for srcrow in linearrows
+            dest[destindex] = srclin[srcrow, col]
+            destindex += 1
+        end
+    end
+end
+
+struct SpatialAccelerationTask <: AbstractMotionTask
     path::TreePath{RigidBody{Float64}, Joint{Float64}}
-    Jmatrix::Matrix{Float64}
-    J::GeometricJacobian{ContiguousRowView{Float64}}
+    jacobian::GeometricJacobian{Matrix{Float64}}
+    angularrows::UnitRange{Int}
+    linearrows::UnitRange{Int}
+    coeffmatrix::Matrix{Float64}
     bias::Vector{Float64}
     desired::Vector{Float64}
 
     function SpatialAccelerationTask(
                 mechanism::Mechanism,
                 path::TreePath{RigidBody{Float64}, Joint{Float64}};
-                frame::CartesianFrame3D = default_frame(target(path)))
+                frame::CartesianFrame3D = default_frame(target(path)),
+                angularrows::UnitRange{Int} = 1 : 3,
+                linearrows::UnitRange{Int} = 1 : 3)
         nv = num_velocities(mechanism)
-        Jmatrix = zeros(6, nv)
         bodyframe = default_frame(target(path))
         baseframe = default_frame(source(path))
-        J = GeometricJacobian(bodyframe, baseframe, frame, view(Jmatrix, 1 : 3, :), view(Jmatrix, 4 : 6, :))
-        bias = zeros(6)
-        desired = zeros(6)
-        new(path, Jmatrix, J, bias, desired)
+        jacobian = GeometricJacobian(bodyframe, baseframe, frame, zeros(3, nv), zeros(3, nv))
+        taskdim = length(angularrows) + length(linearrows)
+        coeffmatrix = zeros(taskdim, nv)
+        bias = zeros(taskdim)
+        desired = zeros(taskdim)
+        new(path, jacobian, angularrows, linearrows, coeffmatrix, bias, desired)
     end
 end
 
-dimension(::SpatialAccelerationTask) = 6
+dimension(task::SpatialAccelerationTask) = size(task.coeffmatrix, 1)
 
 function set_desired!(task::SpatialAccelerationTask, desired::SpatialAcceleration)
-    @framecheck task.J.body desired.body
-    @framecheck task.J.base desired.base
-    @framecheck task.J.frame desired.frame
-    copyto!(task.desired, 1, angular(desired), 1, 3)
-    copyto!(task.desired, 4, linear(desired), 1, 3)
+    @framecheck task.jacobian.body desired.body
+    @framecheck task.jacobian.base desired.base
+    @framecheck task.jacobian.frame desired.frame
+    set_task_vector!(task.desired, desired, task)
+    nothing
+end
+
+function set_desired!(task::SpatialAccelerationTask, desired::AbstractVector{Float64})
+    copyto!(task.desired, desired)
     nothing
 end
 
 function update!(task::SpatialAccelerationTask, state::MechanismState)
     path = task.path
-    J = task.J
-    taskframe = J.frame
-    world_to_task = inv(transform_to_root(state, taskframe))
-    geometric_jacobian!(J, state, path, world_to_task)
+    jacobian = task.jacobian
+    taskframe = jacobian.frame
     J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), taskframe)
-    copyto!(task.bias, 1, angular(J̇v), 1, 3)
-    copyto!(task.bias, 4, linear(J̇v), 1, 3)
+    set_task_vector!(task.bias, J̇v, task)
+    world_to_task = inv(transform_to_root(state, taskframe))
+    geometric_jacobian!(jacobian, state, path, world_to_task)
+    set_task_matrix!(task.coeffmatrix, task.jacobian, task)
     nothing
 end
 
 function task_error(task::SpatialAccelerationTask, v̇)
-    LinearTerm(task.Jmatrix, v̇) + Constant(task.bias) - Constant(task.desired)
+    LinearTerm(task.coeffmatrix, v̇) + Constant(task.bias) - Constant(task.desired)
 end
 
 
-struct AngularAccelerationTask <: MotionTask
-    path::TreePath{RigidBody{Float64}, Joint{Float64}}
-    J::GeometricJacobian{Matrix{Float64}}
-    bias::Vector{Float64}
-    desired::Vector{Float64}
-
-    function AngularAccelerationTask(
-                mechanism::Mechanism,
-                path::TreePath{RigidBody{Float64}, Joint{Float64}};
-                frame::CartesianFrame3D = default_frame(target(path)))
-        nv = num_velocities(mechanism)
-        bodyframe = default_frame(target(path))
-        baseframe = default_frame(source(path))
-        J = GeometricJacobian(bodyframe, baseframe, frame, zeros(3, nv), zeros(3, nv))
-        bias = zeros(3)
-        desired = zeros(3)
-        new(path, J, bias, desired)
-    end
-end
-
-dimension(::AngularAccelerationTask) = 3
-
-function set_desired!(task::AngularAccelerationTask, desired::FreeVector3D)
-    @framecheck task.J.frame desired.frame
-    copyto!(task.desired, desired.v)
-    nothing
-end
-
-function update!(task::AngularAccelerationTask, state::MechanismState)
-    path = task.path
-    J = task.J
-    taskframe = J.frame
-    world_to_task = inv(transform_to_root(state, taskframe))
-    geometric_jacobian!(J, state, path, world_to_task)
-    J̇v = transform(state, -bias_acceleration(state, source(path)) + bias_acceleration(state, target(path)), taskframe)
-    copyto!(task.bias, angular(J̇v))
-    nothing
-end
-
-function task_error(task::AngularAccelerationTask, v̇)
-    LinearTerm(angular(task.J), v̇) + Constant(task.bias) - Constant(task.desired)
-end
-
-
-struct JointAccelerationTask{JT<:JointType{Float64}} <: MotionTask
+struct JointAccelerationTask{JT<:JointType{Float64}} <: AbstractMotionTask
     joint::Joint{Float64, JT}
     v̇range::UnitRange{Int}
     desired::Vector{Float64}
@@ -122,57 +110,79 @@ function task_error(task::JointAccelerationTask, v̇)
 end
 
 
-struct LinearMomentumRateTask
+struct CentroidalMomentumRateTask
     momentummatrix::MomentumMatrix{Matrix{Float64}}
-    desired::Base.RefValue{FreeVector3D{SVector{3, Float64}}}
-    biased_rate::FreeVector3D{Vector{Float64}}
+    angularrows::UnitRange{Int}
+    linearrows::UnitRange{Int}
+    coeffmatrix::Matrix{Float64}
+    bias::Vector{Float64}
+    desired::Vector{Float64}
 
-    function LinearMomentumRateTask(mechanism::Mechanism, centroidalframe::CartesianFrame3D)
+    function CentroidalMomentumRateTask(
+            mechanism::Mechanism;
+            centroidalframe::CartesianFrame3D = CartesianFrame3D("Centroidal"),
+            angularrows::UnitRange{Int} = 1 : 3,
+            linearrows::UnitRange{Int} = 1 : 3)
         nv = num_velocities(mechanism)
         momentummatrix = MomentumMatrix(centroidalframe, zeros(3, nv), zeros(3, nv))
-        desired = Ref(FreeVector3D(zeros(SVector{3, Float64})))
-        biased_rate = FreeVector3D(zeros(3))
-        new(momentummatrix, desired, biased_rate)
+        taskdim = length(angularrows) + length(linearrows)
+        coeffmatrix = zeros(taskdim, nv)
+        bias = zeros(taskdim)
+        desired = zeros(taskdim)
+        new(momentummatrix, angularrows, linearrows, coeffmatrix, bias, desired)
     end
 end
 
-dimension(::LinearMomentumRateTask) = 3
+dimension(task::CentroidalMomentumRateTask) = size(task.coeffmatrix, 2)
 
-function set_desired!(task::LinearMomentumRateTask, desired::FreeVector3D)
-    @framecheck task.desired[].frame desired.frame
-    task.desired[] = desired
-    nothing
+function set_desired!(task::CentroidalMomentumRateTask, desired::Wrench)
+    @framecheck task.momentummatrix.frame desired.frame
+    set_task_vector!(task.desired, desired, task)
 end
 
-function update!(task::LinearMomentumRateTask, state::MechanismState)
+function set_desired!(task::CentroidalMomentumRateTask, desired::AbstractVector{Float64})
+    copyto!(task.desired, desired)
+end
+
+function update!(task::CentroidalMomentumRateTask, state::MechanismState)
     A = task.momentummatrix
     centroidalframe = A.frame
     com = center_of_mass(state)
     centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
     world_to_centroidal = inv(centroidal_to_world)
-    momentum_matrix!(A, state, world_to_centroidal)
     Ȧv = transform(momentum_rate_bias(state), world_to_centroidal)
-    @framecheck Ȧv.frame task.biased_rate.frame
-    task.biased_rate.v .= task.desired[].v .- Ȧv.linear
+    set_task_vector!(task.bias, Ȧv, task)
+    momentum_matrix!(A, state, world_to_centroidal)
+    set_task_matrix!(task.coeffmatrix, A, task)
     nothing
 end
 
-function task_error(task::LinearMomentumRateTask, v̇)
-    LinearTerm(task.momentummatrix.linear, v̇) - Constant(task.biased_rate.v)
+function task_error(task::CentroidalMomentumRateTask, v̇)
+    LinearTerm(task.coeffmatrix, v̇) + Constant(task.bias) - Constant(task.desired)
 end
 
 
+# TODO:
 const SparseSymmetric64 = Symmetric{Float64,SparseMatrixCSC{Float64,Int}}
 
-struct Weighted{T<:MotionTask} <: MotionTask
+# struct MotionTaskSpecification
+#     objectiveterms::Vector{Pair{AbstractMotionTask, SparseSymmetric64}}
+#     constraints::Vector{AbstractMotionTask}
+#     MotionTaskSpecification() = new([], [])
+# end
+
+# Base.push!(spec::MotionTaskSpecification, task::AbstractMotionTask, weight::SparseSymmetric64) = push!(spec.objectiveterms, task => weight)
+# Base.push!(spec::MotionTaskSpecification, task::AbstractMotionTask) = push!(spec.constraints, task)
+
+struct WeightedMotionTask{T<:AbstractMotionTask} <: AbstractMotionTask
     task::T
     weight::SparseSymmetric64
 end
 
-dimension(weighted::Weighted) = dimension(weighted.task)
-set_desired!(weighted::Weighted, desired) = set_desired!(weighted.task, desired)
-update!(weighted::Weighted, state::MechanismState) = update!(weighted.task, state)
-task_error(weighted::Weighted, v̇) = task_error(weighted.task, v̇)
+dimension(weighted::WeightedMotionTask) = dimension(weighted.task)
+set_desired!(weighted::WeightedMotionTask, desired) = set_desired!(weighted.task, desired)
+update!(weighted::WeightedMotionTask, state::MechanismState) = update!(weighted.task, state)
+task_error(weighted::WeightedMotionTask, v̇) = task_error(weighted.task, v̇)
 
-disable!(weighted::Weighted) = weighted.weight.data[:] = 0.0
+disable!(weighted::WeightedMotionTask) = weighted.weight.data[:] = 0.0
 

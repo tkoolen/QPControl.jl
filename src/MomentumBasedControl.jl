@@ -2,17 +2,27 @@ __precompile__()
 
 module MomentumBasedControl
 
+# Contact types
 export
     ContactInfo,
-    ContactSettings,
-    MotionTask,
-    SpatialAccelerationTask,
-    AngularAccelerationTask,
-    JointAccelerationTask,
-    LinearMomentumRateTask,
-    Weighted
+    ContactSettings
 
+# Task types
 export
+    AbstractMotionTask,
+    SpatialAccelerationTask,
+    JointAccelerationTask,
+    CentroidalMomentumRateTask
+    # WeightedMotionTask,
+
+# Control types
+export
+    MomentumBasedController
+
+# Utility functions
+export
+    contactsettings,
+    motiontasks,
     disable!
 
 using Compat
@@ -29,7 +39,7 @@ const MOI = MathOptInterface
 
 include("contacts.jl")
 include("tasks.jl")
-# include("controller.jl")
+include("controller.jl")
 # include("util.jl")
 
 end # module
