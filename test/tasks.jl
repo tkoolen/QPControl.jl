@@ -42,7 +42,7 @@ end
     v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
 
     centroidalframe = CartesianFrame3D("centroidal")
-    task = CentroidalMomentumRateTask(mechanism, centroidalframe = centroidalframe)
+    task = CentroidalMomentumRateTask(mechanism, centroidalframe)
     err = MBC.task_error(task, v̇)
 
     angular, linear = SVector(1., 2., 3.), SVector(4., 5., 6.)

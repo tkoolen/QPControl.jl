@@ -86,7 +86,7 @@ end
 #                 end
 #             end
 #         end
-#         add!(controller, MomentumRateTask(ḣdes, eye(SMatrix{3, 3}), eye(SMatrix{3, 3}), 1.))
+#         add!(controller, CentroidalMomentumRateTask(ḣdes, eye(SMatrix{3, 3}), eye(SMatrix{3, 3}), 1.))
 #         controller(τ, 0., state)
 
 #         # Ensure that desired momentum rate is achieved.

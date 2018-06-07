@@ -119,8 +119,8 @@ struct CentroidalMomentumRateTask
     desired::Vector{Float64}
 
     function CentroidalMomentumRateTask(
-            mechanism::Mechanism;
-            centroidalframe::CartesianFrame3D = CartesianFrame3D("Centroidal"),
+            mechanism::Mechanism,
+            centroidalframe::CartesianFrame3D = CartesianFrame3D(),
             angularrows::UnitRange{Int} = 1 : 3,
             linearrows::UnitRange{Int} = 1 : 3)
         nv = num_velocities(mechanism)
@@ -163,7 +163,7 @@ end
 
 
 # TODO:
-const SparseSymmetric64 = Symmetric{Float64,SparseMatrixCSC{Float64,Int}}
+# const SparseSymmetric64 = Symmetric{Float64,SparseMatrixCSC{Float64,Int}}
 
 # struct MotionTaskSpecification
 #     objectiveterms::Vector{Pair{AbstractMotionTask, SparseSymmetric64}}
@@ -174,15 +174,15 @@ const SparseSymmetric64 = Symmetric{Float64,SparseMatrixCSC{Float64,Int}}
 # Base.push!(spec::MotionTaskSpecification, task::AbstractMotionTask, weight::SparseSymmetric64) = push!(spec.objectiveterms, task => weight)
 # Base.push!(spec::MotionTaskSpecification, task::AbstractMotionTask) = push!(spec.constraints, task)
 
-struct WeightedMotionTask{T<:AbstractMotionTask} <: AbstractMotionTask
-    task::T
-    weight::SparseSymmetric64
-end
+# struct WeightedMotionTask{T<:AbstractMotionTask} <: AbstractMotionTask
+#     task::T
+#     weight::SparseSymmetric64
+# end
 
-dimension(weighted::WeightedMotionTask) = dimension(weighted.task)
-set_desired!(weighted::WeightedMotionTask, desired) = set_desired!(weighted.task, desired)
-update!(weighted::WeightedMotionTask, state::MechanismState) = update!(weighted.task, state)
-task_error(weighted::WeightedMotionTask, v̇) = task_error(weighted.task, v̇)
+# dimension(weighted::WeightedMotionTask) = dimension(weighted.task)
+# set_desired!(weighted::WeightedMotionTask, desired) = set_desired!(weighted.task, desired)
+# update!(weighted::WeightedMotionTask, state::MechanismState) = update!(weighted.task, state)
+# task_error(weighted::WeightedMotionTask, v̇) = task_error(weighted.task, v̇)
 
-disable!(weighted::WeightedMotionTask) = weighted.weight.data[:] = 0.0
+# disable!(weighted::WeightedMotionTask) = weighted.weight.data[:] = 0.0
 

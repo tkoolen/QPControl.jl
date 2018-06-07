@@ -13,7 +13,6 @@ export
     SpatialAccelerationTask,
     JointAccelerationTask,
     CentroidalMomentumRateTask
-    # WeightedMotionTask,
 
 # Control types
 export
@@ -21,8 +20,6 @@ export
 
 # Utility functions
 export
-    contactsettings,
-    motiontasks,
     disable!
 
 using Compat
@@ -33,6 +30,7 @@ using RigidBodyDynamics.PDControl
 using SimpleQP
 using StaticArrays
 using Rotations
+using TypeSortedCollections
 import MathOptInterface
 
 const MOI = MathOptInterface
