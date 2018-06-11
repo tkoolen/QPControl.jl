@@ -53,11 +53,7 @@ end
 
     ρ = map(Variable, 1 : MBC.num_basis_vectors(settings))
     tf = eye(Transform3D{Float64}, frame)
-    wrenchbasis = let tf = tf, settings = settings
-        Parameter{WrenchMatrix{StaticArrays.SArray{Tuple{3,4},Float64,2,12}}}(model) do
-            MBC.wrenchbasis(settings, tf)
-        end
-    end
+    wrenchbasis = Parameter(@closure(() -> MBC.wrenchbasis(settings, tf)), model)
 
     torque = @expression angular(wrenchbasis) * ρ
     force = @expression linear(wrenchbasis) * ρ
