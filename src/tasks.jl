@@ -80,6 +80,7 @@ function update!(task::SpatialAccelerationTask, state::MechanismState)
 end
 
 function task_error(task::SpatialAccelerationTask, v̇)
+
     LinearTerm(task.coeffmatrix, v̇) + Constant(task.bias) - Constant(task.desired)
 end
 

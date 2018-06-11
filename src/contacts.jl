@@ -14,7 +14,8 @@ struct ContactInfo
     end
 end
 
-function wrenchbasis(info::ContactInfo, num_basis_vectors::Val{N}) where N
+function wrenchbasis(info::ContactInfo, num_basis_vectors::Val{N},
+        body_to_desired::Transform3D = eye(Transform3D{Float64}, info.localtransform.to)) where N
     Δθ = 2 * π / N
     μ = info.μ
     basis_vectors = ntuple(num_basis_vectors) do i
@@ -24,29 +25,23 @@ function wrenchbasis(info::ContactInfo, num_basis_vectors::Val{N}) where N
     linear = hcat(basis_vectors...)
     angular = zero(linear)
     wrenchmatrix = WrenchMatrix(info.localtransform.from, angular, linear)
-    transform(wrenchmatrix, info.localtransform)
+    transform(wrenchmatrix, body_to_desired * info.localtransform)
 end
 
 mutable struct ContactSettings{N}
     contactinfo::ContactInfo
     weight::Float64
     maxnormalforce::Float64
-    wrenchbasis::WrenchMatrix{Matrix{Float64}}
 
     function ContactSettings{N}(contactinfo::ContactInfo) where N
-        wrenchbasis = WrenchMatrix(contactinfo.point.frame, zeros(3, N), zeros(3, N))
-        new{N}(contactinfo, 0.0, 0.0, wrenchbasis)
+        new{N}(contactinfo, 0.0, 0.0)
     end
 end
 
 disable!(settings::ContactSettings) = settings.maxnormalforce = 0
 isenabled(settings::ContactSettings) = settings.maxnormalforce > 0
-wrenchbasis(settings::ContactSettings) = settings.wrenchbasis
+num_basis_vectors(::ContactSettings{N}) where {N} = N
 
-function update_wrench_basis!(settings::ContactSettings{N}, body_to_centroidal::Transform3D) where N
-    basis = transform(wrenchbasis(settings.contactinfo, Val(N)), body_to_centroidal)
-    @framecheck basis.frame settings.wrenchbasis.frame
-    copyto!(settings.wrenchbasis.angular, basis.angular)
-    copyto!(settings.wrenchbasis.linear, basis.linear)
-    nothing
+function wrenchbasis(settings::ContactSettings{N}, body_to_desired::Transform3D) where N
+    wrenchbasis(settings.contactinfo, Val(N), body_to_desired)
 end

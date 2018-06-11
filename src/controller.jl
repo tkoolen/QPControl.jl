@@ -7,21 +7,11 @@
 #   Dict{<:AbstractMotionTask, SparseSymmetric64} for weights
 # * convert motion tasks to TypeSortedCollection in outer constructor
 
-# SimpleQP design:
-# * parameters should store matrix/vector/number that you can modify
-# * problem specification should also contain information about how to update the constraints/objective terms. solve!(model) should always use most recent data
-# * with lazy evaluation, checking cache staleness is important; should be designed up front.
-# * big question: how to do cache invalidation?
-# * separate graph? Need vertex indices for parameters.
-
-const SparseSymmetric64 = Symmetric{Float64,SparseMatrixCSC{Float64,Int}}
-
-
-struct MomentumBasedController{O<:MOI.AbstractOptimizer, N, M}
+struct MomentumBasedController{O<:MOI.AbstractOptimizer, S<:MechanismState, N, M}
     # dynamics-related
-    mechanism::Mechanism{Float64} # TODO: possibly remove
-    centroidalframe::CartesianFrame3D
+    state::S
     result::DynamicsResult{Float64, Float64}
+    centroidalframe::CartesianFrame3D
     momentummatrix::MomentumMatrix{Matrix{Float64}}
     externalwrenches::Dict{RigidBody{Float64}, Wrench{Float64}}
 
@@ -74,6 +64,7 @@ function MomentumBasedController(
         contactsettings::Vector{ContactSettings{N}},
         motionconstraints::Vector{<:AbstractMotionTask},
         motionobjectiveterms::Dict{<:AbstractMotionTask, SparseSymmetric64}) where {O<:MOI.AbstractOptimizer, N}
+    state = MechanismState(mechanism)
     motiontasks = TypeSortedCollection(vcat(motionconstraints, collect(keys(motionobjectiveterms))))
     MomentumBasedController{O, N, typeof(motiontasks)}(mechanism, optimizer, contactsettings, motiontasks, motionobjectiveterms)
 end

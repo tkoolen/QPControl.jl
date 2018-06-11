@@ -14,7 +14,7 @@ export
     JointAccelerationTask,
     CentroidalMomentumRateTask
 
-# Control types
+# Controller
 export
     MomentumBasedController
 
@@ -36,8 +36,8 @@ import MathOptInterface
 const MOI = MathOptInterface
 
 include("contacts.jl")
-include("tasks.jl")
-include("controller.jl")
+# include("tasks.jl")
+# include("controller.jl")
 # include("util.jl")
 
 end # module
