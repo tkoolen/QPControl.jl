@@ -12,7 +12,8 @@ export
     AbstractMotionTask,
     SpatialAccelerationTask,
     JointAccelerationTask,
-    CentroidalMomentumRateTask
+    MomentumRateTask,
+    LinearMomentumRateTask
 
 # Controller
 export
@@ -31,13 +32,15 @@ using SimpleQP
 using StaticArrays
 using Rotations
 using TypeSortedCollections
+using FastClosures
+
 import MathOptInterface
 
 const MOI = MathOptInterface
 
 include("contacts.jl")
-# include("tasks.jl")
-# include("controller.jl")
+include("tasks.jl")
+include("controller.jl")
 # include("util.jl")
 
 end # module

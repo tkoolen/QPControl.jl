@@ -1,99 +1,75 @@
-# TODO:
-# * max normal force
-# * split up motion tasks into hard constraints and objective terms:
-#   * constraints: just pass in a Vector{<:AbstractMotionTask}
-#   * objective terms: Dict{<:AbstractMotionTask, SparseSymmetric64}
-# * inner constructor: take TypeSortedCollection `motiontasks` (all tasks) +
-#   Dict{<:AbstractMotionTask, SparseSymmetric64} for weights
-# * convert motion tasks to TypeSortedCollection in outer constructor
-
-struct MomentumBasedController{O<:MOI.AbstractOptimizer, S<:MechanismState, N, M}
+struct MomentumBasedController{O<:MOI.AbstractOptimizer, S<:MechanismState, N}
     # dynamics-related
     state::S
     result::DynamicsResult{Float64, Float64}
     centroidalframe::CartesianFrame3D
-    momentummatrix::MomentumMatrix{Matrix{Float64}}
     externalwrenches::Dict{RigidBody{Float64}, Wrench{Float64}}
-
-    # contact info and motion tasks
-    contactsettings::Vector{ContactSettings{N}}
-    motiontasks::M
-
-    # qp-related
+    contactsettings::Vector{Pair{ContactSettings{N}, Vector{Variable}}}
     qpmodel::SimpleQP.Model{O}
+    objective::SimpleQP.LazyExpression # to incrementally build the objective function
 
-    # TODO: remove:
-    Ȧv_angular::Vector{Float64}
-    Ȧv_linear::Vector{Float64}
-    external_torque_sum::Vector{Float64}
-    external_force_sum::Vector{Float64}
-
-    function MomentumBasedController{O, N, M}(
-            mechanism::Mechanism{Float64}, optimizer::O,
-            contactsettings::Vector{ContactSettings{N}}, motiontasks::M,
-            taskweights::Dict{<:AbstractMotionTask, SparseSymmetric64}) where {O<:MOI.AbstractOptimizer, N, M}
-        nv = num_velocities(mechanism)
-
-        # dynamics-related
-        centroidalframe = CartesianFrame3D("centroidal")
+    function MomentumBasedController{N}(mechanism::Mechanism{Float64}, optimizer::O) where {O<:MOI.AbstractOptimizer, N}
+        state = MechanismState(mechanism)
         result = DynamicsResult(mechanism)
-        totalmass = mass(mechanism)
-
-        # contact info and motion tasks
+        centroidalframe = CartesianFrame3D("centroidal")
         rootframe = root_frame(mechanism)
         externalwrenches = Dict(b => zero(Wrench{Float64}, rootframe) for b in bodies(mechanism))
-
-        # qp-related
+        contactsettings = Vector{Pair{ContactSettings{N}, Vector{Variable}}}()
         qpmodel = SimpleQP.Model(optimizer)
-        Ȧv_angular = zeros(3)
-        Ȧv_linear = zeros(3)
+        v̇ = [Variable(model) for _ = 1 : num_velocities(state)]
+        objective = SimpleQP.LazyExpression(identity, 0.0)
         # ρ = Vector{Float64}()
-
-        controller = new{O, N, M}(
-            mechanism, centroidalframe, totalmass, result, momentummatrix, externalwrenches,
-            contactsettings, motiontasks,
-            qpmodel, Ȧv_angular, Ȧv_linear)
-        set_up_qp!(controller, taskweights)
-        controller
+        new{O, typeof(state), N}(state, result, centroidalframe, externalwrenches, contactsettings, qpmodel, v̇, objective)
     end
-end
-
-function MomentumBasedController(
-        mechanism::Mechanism,
-        optimizer::O,
-        contactsettings::Vector{ContactSettings{N}},
-        motionconstraints::Vector{<:AbstractMotionTask},
-        motionobjectiveterms::Dict{<:AbstractMotionTask, SparseSymmetric64}) where {O<:MOI.AbstractOptimizer, N}
-    state = MechanismState(mechanism)
-    motiontasks = TypeSortedCollection(vcat(motionconstraints, collect(keys(motionobjectiveterms))))
-    MomentumBasedController{O, N, typeof(motiontasks)}(mechanism, optimizer, contactsettings, motiontasks, motionobjectiveterms)
 end
 
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
-function set_up_qp!(controller::MomentumBasedController, taskweights::Dict{<:AbstractMotionTask, SparseSymmetric64})
+function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
+    state = controller.state
+    result = controller.result
+    qpmodel = controller.qpmodel
+    externalwrenches = result.externalwrenches
+    copyto!(state, x)
+    solve!(qpmodel)
+    # TODO: check status
+    result.v̇ .= value.(qpmodel, controller.v̇)
+    com = center_of_mass(state)
+    centroidal_to_world = Transform3D(controller.centroidalframe, com.frame, com.v)
+    map!(@closure(wrench -> transform(wrench, centroidal_to_world)), values(externalwrenches), values(externalwrenches))
+    inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, externalwrenches)
+    τ
+end
+
+function addtask!(controller::MomentumBasedController, task::AbstractMotionTask)
     model = controller.qpmodel
-    v̇ = [Variable(model) for _ = 1 : num_velocities(controller.mechanism)]
-
-    # Newton-Euler
-    # A = controller.momentummatrix
-
-
-    # Motion tasks
-    foreach(controller.motiontasks) do task
-        taskdim = dimension(task)
-        if haskey(taskweights, task)
-            @constraint(model, task_error(task, v̇) == Constant(zeros(taskdim)))
-        else
-            e = [Variable(model) for _ = 1 : taskdim]
-            @constraint(model, LinearTerm(eye(taskdim), e) == task_error(task, v̇)) # FIXME: no sparsity
-            # FIXME: handle weight
-        end
-    end
-
-    # Contacts
-
-
+    state = controller.state
+    v̇ = controller.v̇
+    @constraint(model, task_error(task, model, state, v̇) == zeros(dimension(task)))
     nothing
 end
 
+function add_task_error_slack_variables!(controller::MomentumBasedController, task::AbstractMotionTask)
+    model = controller.qpmodel
+    state = controller.state
+    v̇ = controller.v̇
+    e = [Variable(model) for _ = 1 : dimension(task)]
+    @constraint(model, e == task_error(task, model, state, v̇))
+    e
+end
+
+function addtask!(controller::MomentumBasedController, task::AbstractMotionTask, weight::Number)
+    e = add_task_error_slack_variables!(controller, task)
+    controller.objective = @expression controller.objective + weight * (e ⋅ e)
+    e
+end
+
+function addtask!(controller::MomentumBasedController, task::AbstractMotionTask, weight::AbstractMatrix)
+    e = add_task_error_slack_variables!(controller, task)
+    controller.objective = @expression controller.objective + e' * weight * e
+    e
+end
+
+function initialize!(controller::MomentumBasedController)
+    # TODO: add wrench balance constraint
+end
