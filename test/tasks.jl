@@ -4,33 +4,36 @@
     rand_configuration!(state)
     nv = num_velocities(mechanism)
     v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    qpmodel = MockModel()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
-        body = rand(bodies(mechanism))
+        body = rand(setdiff(bodies(mechanism), [base]))
         p = RigidBodyDynamics.path(mechanism, base, body)
         task = SpatialAccelerationTask(mechanism, p)
-        err = MBC.task_error(task, v̇)
-        angular, linear = SVector(1., 2., 3.), SVector(4., 5., 6.)
+        err = MBC.task_error(task, qpmodel, state, v̇)
+
         bodyframe = default_frame(body)
         baseframe = default_frame(base)
-        desired = SpatialAcceleration(bodyframe, baseframe, bodyframe, angular, linear)
+        desired = SpatialAcceleration(bodyframe, baseframe, bodyframe, SVector(1., 2., 3.), SVector(4., 5., 6.))
         MBC.set_desired!(task, desired)
+
         zero_velocity!(state)
-        MBC.update!(task, state)
         v̇0 = zeros(length(v̇))
-        @test err(Dict(zip(v̇, v̇0))) == -Array(desired)
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(desired)
 
         MBC.set_desired!(task, zero(desired))
-        @test err(Dict(zip(v̇, v̇0))) == zeros(6)
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == zeros(6)
         rand_velocity!(state)
-        MBC.update!(task, state)
         biasaccel = transform(state, -RBD.bias_acceleration(state, base) + RBD.bias_acceleration(state, body), bodyframe)
-        @test err(Dict(zip(v̇, v̇0))) == Array(biasaccel)
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(biasaccel)
 
         zero_velocity!(state)
-        MBC.update!(task, state)
         v̇rand = rand(nv)
-        @test err(Dict(zip(v̇, v̇rand))) ≈ Array(transform(state, SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe)) atol = 1e-12
+        expected = Array(transform(state, -SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe))
+        @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ expected atol = 1e-12
     end
 end
 

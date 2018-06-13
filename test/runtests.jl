@@ -22,12 +22,9 @@ const MOI = MathOptInterface
 macro test_noalloc(expr)
     quote
         let
-            f = function ()
-                $expr
-                allocs = @allocated $expr
-                @test allocs == 0
-            end
-            f()
+            $expr
+            allocs = @allocated $expr
+            @test allocs == 0
         end
     end |> esc
 end
@@ -43,7 +40,7 @@ function defaultoptimizer()
 end
 
 include("contacts.jl")
-# include("tasks.jl")
+include("tasks.jl")
 # include("controller.jl")
 # include("notebooks.jl")
 

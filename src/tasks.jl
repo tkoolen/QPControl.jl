@@ -21,27 +21,28 @@ end
 dimension(task::SpatialAccelerationTask) = 6
 
 function set_desired!(task::SpatialAccelerationTask, desired::SpatialAcceleration)
-    @framecheck task.desired.body desired.body
-    @framecheck task.desired.base desired.base
-    @framecheck task.desired.frame desired.frame
+    @framecheck task.desired[].body desired.body
+    @framecheck task.desired[].base desired.base
+    @framecheck task.desired[].frame desired.frame
     task.desired[] = desired
     nothing
 end
 
-function task_error(task::SpatialAccelerationTask, model::SimpleQP.Model, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     J = let task = task, state = state
-        Parameter(model) do
-            world_to_desired = inv(transform_to_root(state, task.desired[].frame))
-            geometric_jacobian!(task.jacobian, state, task.path, world_to_desired)
+        Parameter(task.jacobian, qpmodel) do jac
+            # world_to_desired = inv(transform_to_root(state, task.desired[].frame))
+            geometric_jacobian!(jac, state, task.path)#, world_to_desired)
         end
     end
+
     J̇v = let task = task, state = state
-        Parameter(model) do
+        Parameter(qpmodel) do
             world_to_desired = inv(transform_to_root(state, task.desired[].frame))
             -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
         end
     end
-    desired = Parameter(@closure(() -> task.desired[]), model)
+    desired = Parameter(@closure(() -> task.desired[]), qpmodel)
     @expression [
         angular(desired) - (angular(J) * v̇ + angular(J̇v));
         linear(desired) - (linear(J) * v̇ + linear(J̇v))]
@@ -60,26 +61,12 @@ end
 dimension(task::JointAccelerationTask) = length(task.desired)
 set_desired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
 
-function task_error(task::JointAccelerationTask, model::SimpleQP.Model, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    desired = Parameter(@closure(() -> task.desired), model)
+function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+    desired = Parameter(@closure(() -> task.desired), qpmodel)
     v̇joint = v̇[velocity_range(state, task.joint)]
     @expression desired - v̇joint
 end
 
-function momentum_rate_task_params(task, model, state, v̇)
-    world_to_centroidal = let task = task, state = state
-        Parameter(model) do
-            A = task.momentum_matrix
-            centroidalframe = A.frame
-            com = center_of_mass(state)
-            centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
-            inv(centroidal_to_world)
-        end
-    end
-    A = Parameter(@closure(() -> momentum_matrix!(task.momentum_matrix, state, world_to_centroidal())), model)
-    Ȧv = Parameter(@closure(() -> transform(momentum_rate_bias(state), world_to_centroidal())), model)
-    A, Ȧv
-end
 
 struct MomentumRateTask
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
@@ -93,6 +80,21 @@ struct MomentumRateTask
     end
 end
 
+function momentum_rate_task_params(task, qpmodel, state, v̇)
+    world_to_centroidal = let task = task, state = state
+        Parameter(qpmodel) do
+            A = task.momentum_matrix
+            centroidalframe = A.frame
+            com = center_of_mass(state)
+            centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
+            inv(centroidal_to_world)
+        end
+    end
+    A = Parameter(@closure(() -> momentum_matrix!(task.momentum_matrix, state, world_to_centroidal())), qpmodel)
+    Ȧv = Parameter(@closure(() -> transform(momentum_rate_bias(state), world_to_centroidal())), qpmodel)
+    A, Ȧv
+end
+
 dimension(task::MomentumRateTask) = 6
 
 function set_desired!(task::MomentumRateTask, desired::Wrench)
@@ -100,13 +102,14 @@ function set_desired!(task::MomentumRateTask, desired::Wrench)
     task.desired[] = desired
 end
 
-function task_error(task::MomentumRateTask, model::SimpleQP.Model, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    A, Ȧv = momentum_rate_task_params(task, model, state, v̇)
-    desired = Parameter(@closure(() -> task.desired[]), model)
+function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+    A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
+    desired = Parameter(@closure(() -> task.desired[]), qpmodel)
     @expression [
         angular(desired) - (angular(A) * v̇ + angular(Ȧv));
         linear(desired) - (linear(A) * v̇ + linear(Ȧv))]
 end
+
 
 struct LinearMomentumRateTask
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
@@ -127,8 +130,8 @@ function set_desired!(task::LinearMomentumRateTask, desired::FreeVector3D)
     task.desired[] = desired
 end
 
-function task_error(task::LinearMomentumRateTask, model::SimpleQP.Model, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    A, Ȧv = momentum_rate_task_params(task, model, state, v̇)
-    desired = Parameter(@closure(() -> task.desired[].v), model)
+function task_error(task::LinearMomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+    A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
+    desired = Parameter(@closure(() -> task.desired[].v), qpmodel)
     @expression desired - (angular(A) * v̇ + angular(Ȧv))
 end
