@@ -80,17 +80,23 @@ struct MomentumRateTask
 end
 
 function momentum_rate_task_params(task, qpmodel, state, v̇)
-    world_to_centroidal = let task = task, state = state
-        Parameter(qpmodel) do
-            A = task.momentum_matrix
-            centroidalframe = A.frame
+    # TODO: repeated computation of world_to_centroidal, but running into inference issues otherwise
+    A = let state = state, centroidalframe = task.momentum_matrix.frame
+        Parameter(task.momentum_matrix, qpmodel) do A
             com = center_of_mass(state)
             centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
-            inv(centroidal_to_world)
+            world_to_centroidal = inv(centroidal_to_world)
+            momentum_matrix!(A, state, world_to_centroidal)
         end
     end
-    A = Parameter(@closure(() -> momentum_matrix!(task.momentum_matrix, state, world_to_centroidal())), qpmodel)
-    Ȧv = Parameter(@closure(() -> transform(momentum_rate_bias(state), world_to_centroidal())), qpmodel)
+    Ȧv = let state = state, centroidalframe = task.momentum_matrix.frame
+        Parameter{Wrench{Float64}}(qpmodel) do
+            com = center_of_mass(state)
+            centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
+            world_to_centroidal = inv(centroidal_to_world)
+            transform(momentum_rate_bias(state), world_to_centroidal)
+        end
+    end
     A, Ȧv
 end
 
@@ -103,7 +109,9 @@ end
 
 function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
-    desired = Parameter(@closure(() -> task.desired[]), qpmodel)
+    desired = let task = task
+        Parameter{Wrench{Float64}}(() -> task.desired[], qpmodel)
+    end
     @expression [
         angular(desired) - (angular(A) * v̇ + angular(Ȧv));
         linear(desired) - (linear(A) * v̇ + linear(Ȧv))]
