@@ -29,19 +29,15 @@ function set_desired!(task::SpatialAccelerationTask, desired::SpatialAcceleratio
 end
 
 function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    J = let task = task, state = state
-        Parameter(task.jacobian, qpmodel) do jac
-            world_to_desired = inv(transform_to_root(state, task.desired[].frame))
-            geometric_jacobian!(jac, state, task.path, world_to_desired)
-        end
+    J = Parameter(task.jacobian, qpmodel) do jac
+        world_to_desired = inv(transform_to_root(state, task.desired[].frame))
+        geometric_jacobian!(jac, state, task.path, world_to_desired)
     end
-    J̇v = let task = task, state = state
-        Parameter{SpatialAcceleration{Float64}}(qpmodel) do
-            bias = -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
-            transform(state, bias, task.desired[].frame)
-        end
+    J̇v = Parameter{SpatialAcceleration{Float64}}(qpmodel) do
+        bias = -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
+        transform(state, bias, task.desired[].frame)
     end
-    desired = Parameter{SpatialAcceleration{Float64}}(@closure(() -> task.desired[]), qpmodel)
+    desired = Parameter{SpatialAcceleration{Float64}}(() -> task.desired[], qpmodel)
     @expression [
         angular(desired) - (angular(J) * v̇ + angular(J̇v));
         linear(desired) - (linear(J) * v̇ + linear(J̇v))]
@@ -61,7 +57,7 @@ dimension(task::JointAccelerationTask) = length(task.desired)
 set_desired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
 
 function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    desired = Parameter(@closure(() -> task.desired), qpmodel)
+    desired = Parameter(() -> task.desired, qpmodel)
     v̇joint = v̇[velocity_range(state, task.joint)]
     @expression desired - v̇joint
 end
@@ -80,22 +76,20 @@ struct MomentumRateTask
 end
 
 function momentum_rate_task_params(task, qpmodel, state, v̇)
-    # TODO: repeated computation of world_to_centroidal, but running into inference issues otherwise
-    A = let state = state, centroidalframe = task.momentum_matrix.frame
-        Parameter(task.momentum_matrix, qpmodel) do A
-            com = center_of_mass(state)
-            centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
-            world_to_centroidal = inv(centroidal_to_world)
-            momentum_matrix!(A, state, world_to_centroidal)
-        end
+    # TODO: repeated computation of world_to_centroidal, but running into inference issues if that computation
+    # is extracted out into its own Parameter
+    centroidalframe = task.momentum_matrix.frame
+    A = Parameter(task.momentum_matrix, qpmodel) do A
+        com = center_of_mass(state)
+        centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
+        world_to_centroidal = inv(centroidal_to_world)
+        momentum_matrix!(A, state, world_to_centroidal)
     end
-    Ȧv = let state = state, centroidalframe = task.momentum_matrix.frame
-        Parameter{Wrench{Float64}}(qpmodel) do
-            com = center_of_mass(state)
-            centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
-            world_to_centroidal = inv(centroidal_to_world)
-            transform(momentum_rate_bias(state), world_to_centroidal)
-        end
+    Ȧv = Parameter{Wrench{Float64}}(qpmodel) do
+        com = center_of_mass(state)
+        centroidal_to_world = Transform3D(centroidalframe, com.frame, com.v)
+        world_to_centroidal = inv(centroidal_to_world)
+        transform(momentum_rate_bias(state), world_to_centroidal)
     end
     A, Ȧv
 end
@@ -109,9 +103,7 @@ end
 
 function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
-    desired = let task = task
-        Parameter{Wrench{Float64}}(() -> task.desired[], qpmodel)
-    end
+    desired = Parameter{Wrench{Float64}}(() -> task.desired[], qpmodel)
     @expression [
         angular(desired) - (angular(A) * v̇ + angular(Ȧv));
         linear(desired) - (linear(A) * v̇ + linear(Ȧv))]

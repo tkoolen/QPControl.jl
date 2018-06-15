@@ -21,7 +21,7 @@
         end
     end
     let contactinfo = contactinfo
-        @test @allocated(MBC.wrenchbasis(contactinfo, Val(4))) == 0
+        @test_noalloc MBC.wrenchbasis(contactinfo, Val(4))
     end
 end
 
