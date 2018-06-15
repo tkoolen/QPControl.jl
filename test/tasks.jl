@@ -31,9 +31,13 @@
         @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(biasaccel)
 
         zero_velocity!(state)
+        setdirty!(qpmodel)
         v̇rand = rand(nv)
         expected = Array(transform(state, -SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe))
         @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ expected atol = 1e-12
+
+        allocs = @allocated err()
+        @test allocs == 0
     end
 end
 

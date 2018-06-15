@@ -31,18 +31,17 @@ end
 function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     J = let task = task, state = state
         Parameter(task.jacobian, qpmodel) do jac
-            # world_to_desired = inv(transform_to_root(state, task.desired[].frame))
-            geometric_jacobian!(jac, state, task.path)#, world_to_desired)
-        end
-    end
-
-    J̇v = let task = task, state = state
-        Parameter(qpmodel) do
             world_to_desired = inv(transform_to_root(state, task.desired[].frame))
-            -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
+            geometric_jacobian!(jac, state, task.path, world_to_desired)
         end
     end
-    desired = Parameter(@closure(() -> task.desired[]), qpmodel)
+    J̇v = let task = task, state = state
+        Parameter{SpatialAcceleration{Float64}}(qpmodel) do
+            bias = -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
+            transform(state, bias, task.desired[].frame)
+        end
+    end
+    desired = Parameter{SpatialAcceleration{Float64}}(@closure(() -> task.desired[]), qpmodel)
     @expression [
         angular(desired) - (angular(J) * v̇ + angular(J̇v));
         linear(desired) - (linear(J) * v̇ + linear(J̇v))]
