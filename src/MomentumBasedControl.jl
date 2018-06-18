@@ -31,7 +31,6 @@ using RigidBodyDynamics.PDControl
 using SimpleQP
 using StaticArrays
 using Rotations
-using TypeSortedCollections
 using FastClosures # TODO: necessary?
 
 import MathOptInterface

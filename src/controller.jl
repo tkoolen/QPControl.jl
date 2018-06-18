@@ -40,7 +40,8 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     # externalwrenches = result.externalwrenches
     copyto!(state, x)
     solve!(qpmodel)
-    # TODO: check status
+    @assert terminationstatus(qpmodel) == MOI.Success
+    @assert primalstatus(qpmodel) == MOI.FeasiblePoint
     result.v̇ .= value.(qpmodel, controller.v̇)
     # com = center_of_mass(state)
     # centroidal_to_world = Transform3D(controller.centroidalframe, com.frame, com.v)
