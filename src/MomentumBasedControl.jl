@@ -2,44 +2,44 @@ __precompile__()
 
 module MomentumBasedControl
 
+# Contact-related
+export
+    ContactInfo,
+    ContactSettings,
+    disable!
+
+# Task-related
+export
+    AbstractMotionTask,
+    SpatialAccelerationTask,
+    JointAccelerationTask,
+    MomentumRateTask,
+    LinearMomentumRateTask,
+    setdesired!
+
+# Controller
+export
+    MomentumBasedController,
+    addtask!,
+    addcontact!
+
+using Compat
 using RigidBodyDynamics
 using RigidBodyDynamics.Graphs
 using RigidBodyDynamics.Contact
 using RigidBodyDynamics.PDControl
-using JuMP
+using SimpleQP
 using StaticArrays
 using Rotations
-using Compat
-using ForwardDiff
-import MathProgBase: setparameters!
-import OSQP: OSQPMathProgBaseInterface
+using FastClosures # TODO: necessary?
 
-import RigidBodyDynamics: set! # TODO
+import MathOptInterface
 
-export MomentumBasedController,
-    ContactSettings,
-    SpatialAccelerationTask,
-    JointAccelerationTask,
-    MomentumRateTask,
-    centroidal_frame,
-    add_contact!,
-    add_contacts!,
-    add_mechanism_contacts!,
-    add!,
-    add_mechanism_joint_accel_tasks!,
-    clear_contacts!,
-    clear_desireds!,
-    reset!,
-    regularize_joint_accels!,
-    pd_center_of_mass!,
-    set!,
-    disable!,
-    num_basis_vectors,
-    val_deriv_deriv2
+const MOI = MathOptInterface
 
-include("contact_settings.jl")
-include("motion_tasks.jl")
+include("contacts.jl")
+include("tasks.jl")
 include("controller.jl")
-include("util.jl")
+# include("util.jl")
 
 end # module

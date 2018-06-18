@@ -16,8 +16,11 @@ addons:
   apt:
     packages:
     - libzmq3
+before_script:
+  - julia -e 'Pkg.clone("https://github.com/tkoolen/SimpleQP.jl")'
+  - julia -e 'Pkg.add("RigidBodyDynamics.jl"); Pkg.checkout("RigidBodyDynamics.jl")'
 # script:
 #  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-#  - julia -e 'Pkg.clone(pwd()); Pkg.checkout("RigidBodyDynamics"); Pkg.checkout("RigidBodyTreeInspector"); Pkg.checkout("RigidBodySim"); Pkg.build("MomentumBasedControl"); Pkg.test("MomentumBasedControl"; coverage=true)'
+#  - julia -e 'Pkg.clone(pwd()); Pkg.build("MomentumBasedControl"); Pkg.test("MomentumBasedControl"; coverage=true)'
 after_success:
   - julia -e 'cd(Pkg.dir("MomentumBasedControl")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
