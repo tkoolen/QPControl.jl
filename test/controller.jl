@@ -29,41 +29,41 @@
     end
 end
 
-# @testset "zero velocity free fall" begin
-#     val = Valkyrie()
-#     mechanism = val.mechanism
-#     floatingjoint = val.basejoint
-#     N = 4
-#     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
-#     contacts = add_mechanism_contacts!(controller)
-#     jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
-#     state = MechanismState(mechanism)
-#     τ = similar(velocity(state))
+@testset "zero velocity free fall" begin
+    val = Valkyrie()
+    mechanism = val.mechanism
+    floatingjoint = val.basejoint
+    N = 4
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    state = MechanismState(mechanism)
+    τ = similar(velocity(state))
 
-#     srand(5354)
-#     zero!(state)
-#     rand_configuration!(state)
-#     regularize_joint_accels!(controller, 1.)
-#     disable!(jointacceltasks[floatingjoint])
-#     controller(τ, 0., state)
-#     result = DynamicsResult(mechanism)
-#     accels = result.accelerations
-#     spatial_accelerations!(accels, state, controller.result.v̇)
-#     for joint in tree_joints(mechanism)
-#         if joint == floatingjoint
-#             baseaccel = relative_acceleration(accels, val.pelvis, root_body(mechanism))
-#             baseaccel = transform(state, baseaccel, frame_after(floatingjoint))
-#             angularaccel = FreeVector3D(baseaccel.frame, baseaccel.angular)
-#             @test isapprox(angularaccel, FreeVector3D(frame_after(floatingjoint), zeros(SVector{3})), atol = 1e-6)
-#             linearaccel = FreeVector3D(baseaccel.frame, baseaccel.linear)
-#             linearaccel = transform_to_root(state, linearaccel.frame) * linearaccel
-#             @test isapprox(linearaccel, mechanism.gravitational_acceleration; atol = 1e-6)
-#         else
-#             v̇joint = controller.result.v̇[velocity_range(state, joint)]
-#             @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-6)
-#         end
-#     end
-# end
+    srand(5354)
+    zero!(state)
+    rand_configuration!(state)
+    for joint in tree_joints(mechanism)
+        joint == floatingjoint && continue
+        regularize!(controller, joint, 1.0)
+    end
+    controller(τ, 0., state)
+    result = DynamicsResult(mechanism)
+    accels = result.accelerations
+    RBD.spatial_accelerations!(accels, state, controller.result.v̇)
+    for joint in tree_joints(mechanism)
+        if joint == floatingjoint
+            baseaccel = relative_acceleration(accels, val.pelvis, root_body(mechanism))
+            baseaccel = transform(state, baseaccel, frame_after(floatingjoint))
+            angularaccel = FreeVector3D(baseaccel.frame, baseaccel.angular)
+            @test isapprox(angularaccel, FreeVector3D(frame_after(floatingjoint), zeros(SVector{3})), atol = 1e-6)
+            linearaccel = FreeVector3D(baseaccel.frame, baseaccel.linear)
+            linearaccel = transform_to_root(state, linearaccel.frame) * linearaccel
+            @test isapprox(linearaccel, mechanism.gravitational_acceleration; atol = 1e-6)
+        else
+            v̇joint = controller.result.v̇[velocity_range(state, joint)]
+            @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-6)
+        end
+    end
+end
 
 # @testset "achievable momentum rate" begin
 #     val = Valkyrie()

@@ -21,7 +21,8 @@ export
 export
     MomentumBasedController,
     addtask!,
-    addcontact!
+    addcontact!,
+    regularize!
 
 using Compat
 using RigidBodyDynamics
