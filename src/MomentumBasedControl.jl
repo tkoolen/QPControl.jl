@@ -2,26 +2,26 @@ __precompile__()
 
 module MomentumBasedControl
 
-# Contact types
+# Contact-related
 export
     ContactInfo,
-    ContactSettings
+    ContactSettings,
+    disable!
 
-# Task types
+# Task-related
 export
     AbstractMotionTask,
     SpatialAccelerationTask,
     JointAccelerationTask,
     MomentumRateTask,
-    LinearMomentumRateTask
+    LinearMomentumRateTask,
+    setdesired!
 
 # Controller
 export
-    MomentumBasedController
-
-# Utility functions
-export
-    disable!
+    MomentumBasedController,
+    addtask!,
+    addcontact!
 
 using Compat
 using RigidBodyDynamics
@@ -32,7 +32,7 @@ using SimpleQP
 using StaticArrays
 using Rotations
 using TypeSortedCollections
-using FastClosures
+using FastClosures # TODO: necessary?
 
 import MathOptInterface
 

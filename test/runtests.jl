@@ -41,7 +41,7 @@ end
 
 include("contacts.jl")
 include("tasks.jl")
-# include("controller.jl")
+include("controller.jl")
 # include("notebooks.jl")
 
 end # module

@@ -1,8 +1,35 @@
+@testset "fixed base joint space control" begin
+    srand(42)
+    mechanism = rand_tree_mechanism(Float64, Prismatic{Float64}, Revolute{Float64}, Revolute{Float64})
+    N = 4
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    tasks = Dict{Joint{Float64}, JointAccelerationTask}()
+    for joint in tree_joints(mechanism)
+        task = JointAccelerationTask(joint)
+        tasks[joint] = task
+        addtask!(controller, task)
+        setdesired!(task, rand(num_velocities(joint)))
+    end
+    state = MechanismState(mechanism)
+    rand!(state)
+    τ = similar(velocity(state))
+    controller(τ, 0.0, state)
+    allocs = @allocated controller(τ, 0.0, state)
+    @test_broken allocs == 0
+
+    result = DynamicsResult(mechanism)
+    dynamics!(result, state, τ)
+    for joint in tree_joints(mechanism)
+        @test result.v̇[joint] ≈ tasks[joint].desired atol = 1e-10
+    end
+end
+
 # @testset "zero velocity free fall" begin
 #     val = Valkyrie()
 #     mechanism = val.mechanism
 #     floatingjoint = val.basejoint
-#     controller = MomentumBasedController(mechanism, defaultoptimizer())
+#     N = 4
+#     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
 #     contacts = add_mechanism_contacts!(controller)
 #     jointacceltasks = add_mechanism_joint_accel_tasks!(controller)
 #     state = MechanismState(mechanism)
