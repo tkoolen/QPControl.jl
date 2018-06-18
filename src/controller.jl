@@ -79,6 +79,13 @@ function add_task_error_slack_variables!(controller::MomentumBasedController, ta
     e
 end
 
+function regularize!(controller::MomentumBasedController, joint::Joint, weight)
+    task = JointAccelerationTask(joint)
+    setdesired!(task, zeros(num_velocities(joint)))
+    addtask!(controller, task, weight)
+    task
+end
+
 function addcontact!(controller::MomentumBasedController{N}, contactsettings::ContactSettings{N}) where N
     model = controller.qpmodel
     ρ = [Variable(model) for _ = 1 : N]
