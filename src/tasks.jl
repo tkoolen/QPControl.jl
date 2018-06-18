@@ -20,7 +20,7 @@ end
 
 dimension(task::SpatialAccelerationTask) = 6
 
-function set_desired!(task::SpatialAccelerationTask, desired::SpatialAcceleration)
+function setdesired!(task::SpatialAccelerationTask, desired::SpatialAcceleration)
     @framecheck task.desired[].body desired.body
     @framecheck task.desired[].base desired.base
     @framecheck task.desired[].frame desired.frame
@@ -54,7 +54,7 @@ struct JointAccelerationTask{JT<:JointType{Float64}} <: AbstractMotionTask
 end
 
 dimension(task::JointAccelerationTask) = length(task.desired)
-set_desired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
+setdesired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
 
 function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     desired = Parameter(() -> task.desired, qpmodel)
@@ -96,7 +96,7 @@ end
 
 dimension(task::MomentumRateTask) = 6
 
-function set_desired!(task::MomentumRateTask, desired::Wrench)
+function setdesired!(task::MomentumRateTask, desired::Wrench)
     @framecheck task.momentum_matrix.frame desired.frame
     task.desired[] = desired
 end
@@ -124,7 +124,7 @@ end
 
 dimension(task::LinearMomentumRateTask) = 3
 
-function set_desired!(task::LinearMomentumRateTask, desired::FreeVector3D)
+function setdesired!(task::LinearMomentumRateTask, desired::FreeVector3D)
     @framecheck task.momentum_matrix.frame desired.frame
     task.desired[] = desired
 end
