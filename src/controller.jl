@@ -2,6 +2,7 @@ struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
     state::S
     result::DynamicsResult{Float64, Float64}
     centroidalframe::CartesianFrame3D
+    momentum_matrix::MomentumMatrix{Matrix{Float64}}
     externalwrenches::Dict{RigidBody{Float64}, Wrench{Float64}}
     contactsettings::Dict{ContactSettings{N}, SVector{N, Variable}}
     qpmodel::SimpleQP.Model{Float64, O}
@@ -12,14 +13,17 @@ struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
     function MomentumBasedController{N}(mechanism::Mechanism{Float64}, optimizer::O) where {N, O<:MOI.AbstractOptimizer}
         state = MechanismState(mechanism)
         result = DynamicsResult(mechanism)
+        worldframe = root_frame(mechanism)
         centroidalframe = CartesianFrame3D("centroidal")
+        nv = num_velocities(state)
+        momentum_matrix = MomentumMatrix(worldframe, zeros(3, nv), zeros(3, nv))
         rootframe = root_frame(mechanism)
         externalwrenches = Dict(b => zero(Wrench{Float64}, rootframe) for b in bodies(mechanism))
         contactsettings = Dict{ContactSettings{N}, SVector{N, Variable}}()
         qpmodel = SimpleQP.Model(optimizer)
-        v̇ = [Variable(qpmodel) for _ = 1 : num_velocities(state)]
+        v̇ = [Variable(qpmodel) for _ = 1 : nv]
         objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
-        new{N, O, typeof(state)}(state, result, centroidalframe, externalwrenches, contactsettings, qpmodel, v̇, objective, Ref(false))
+        new{N, O, typeof(state)}(state, result, centroidalframe, momentum_matrix, externalwrenches, contactsettings, qpmodel, v̇, objective, Ref(false))
     end
 end
 
@@ -79,10 +83,49 @@ function addcontact!(controller::MomentumBasedController{N}, contactsettings::Co
     ρ = [Variable(model) for _ = 1 : N]
     @constraint(model, ρ >= zeros(N))
     push!(controller.contactsettings, contactsettings => ρ)
+    # TODO: maxnormalforce
+    # TODO: objective term
     nothing
 end
 
 @noinline function initialize!(controller::MomentumBasedController)
+    setobjective!(controller)
+    mechanism = controller.state.mechanism
+    if any(isfloating, out_joints(root_body(mechanism), mechanism))
+        add_wrench_balance_constraint!(controller)
+    end
+end
+
+function setobjective!(controller::MomentumBasedController)
     @objective(controller.qpmodel, Minimize, controller.objective)
-    # TODO: add wrench balance constraint
+end
+
+function add_wrench_balance_constraint!(controller::MomentumBasedController{N}) where N
+    # TODO: repeated computation of A if there's a MomentumRateTask
+    qpmodel = controller.qpmodel
+    state = controller.state
+    mechanism = state.mechanism
+    worldframe = root_frame(mechanism)
+    fg = mass(mechanism) * mechanism.gravitational_acceleration
+    v̇ = controller.v̇
+
+    A = Parameter(A -> momentum_matrix!(A, state), controller.momentum_matrix, qpmodel)
+    Ȧv = Parameter{Wrench{Float64}}(() -> momentum_rate_bias(state), qpmodel)
+    Wg = Parameter{Wrench{Float64}}(() -> Wrench(center_of_mass(state) × fg, fg), qpmodel)
+
+    torque = @expression angular(Wg)
+    force = @expression linear(Wg)
+    for (contactsettings, ρjoint) in controller.contactsettings
+        wrenchbasis = Parameter(qpmodel) do # TODO: inference?
+            to_root = transform_to_root(state, contactsettings.info.localtransform.to) # TODO: make nicer
+            MBC.wrenchbasis(contactsettings, to_root)
+        end
+        torque = @expression torque + angular(wrenchbasis) * ρjoint
+        force = @expression force + angular(wrenchbasis) * ρjoint
+    end
+
+    @constraint(qpmodel, angular(A) * v̇ + angular(Ȧv) == torque)
+    @constraint(qpmodel, linear(A) * v̇ + linear(Ȧv) == force)
+
+    nothing
 end
