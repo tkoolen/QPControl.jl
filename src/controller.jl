@@ -1,4 +1,4 @@
-struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
+mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
     state::S
     result::DynamicsResult{Float64, Float64}
     centroidalframe::CartesianFrame3D
@@ -8,7 +8,7 @@ struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
     qpmodel::SimpleQP.Model{Float64, O}
     v̇::Vector{Variable}
     objective::SimpleQP.LazyExpression # buffer to incrementally build the objective function
-    initialized::Base.RefValue{Bool}
+    initialized::Bool
 
     function MomentumBasedController{N}(mechanism::Mechanism{Float64}, optimizer::O) where {N, O<:MOI.AbstractOptimizer}
         state = MechanismState(mechanism)
@@ -23,16 +23,16 @@ struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
         qpmodel = SimpleQP.Model(optimizer)
         v̇ = [Variable(qpmodel) for _ = 1 : nv]
         objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
-        new{N, O, typeof(state)}(state, result, centroidalframe, momentum_matrix, externalwrenches, contactsettings, qpmodel, v̇, objective, Ref(false))
+        new{N, O, typeof(state)}(state, result, centroidalframe, momentum_matrix, externalwrenches, contactsettings, qpmodel, v̇, objective, false)
     end
 end
 
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
 function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
-    if !controller.initialized[]
+    if !controller.initialized
         initialize!(controller)
-        controller.initialized[] = true
+        controller.initialized = true
     end
     qpmodel = controller.qpmodel
     state = controller.state

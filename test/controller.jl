@@ -1,4 +1,4 @@
-@testset "fixed base joint space control" begin
+@testset "fixed base joint space control, constrained = $constrained" for constrained in [true, false]
     srand(42)
     mechanism = rand_tree_mechanism(Float64, Prismatic{Float64}, Revolute{Float64}, Revolute{Float64})
     N = 4
@@ -7,7 +7,12 @@
     for joint in tree_joints(mechanism)
         task = JointAccelerationTask(joint)
         tasks[joint] = task
-        addtask!(controller, task)
+        if constrained
+            addtask!(controller, task)
+        else
+            weight = 1.0
+            addtask!(controller, task, weight)
+        end
         setdesired!(task, rand(num_velocities(joint)))
     end
     state = MechanismState(mechanism)
