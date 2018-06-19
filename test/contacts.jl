@@ -1,12 +1,12 @@
-@testset "ContactInfo" begin
+@testset "ContactPoint" begin
     frame = CartesianFrame3D()
-    point = Point3D(frame, 1., 2., 3.)
+    position = Point3D(frame, 1., 2., 3.)
     normal = FreeVector3D(frame, normalize(SVector(1., 3., 2.)))
     μ = 0.5
-    contactinfo = ContactInfo(point, normal, μ)
+    point = ContactPoint(position, normal, μ)
 
     for N = 1 : 2 : 10
-        basis = MBC.wrenchbasis(contactinfo, Val(N))
+        basis = MBC.wrenchbasis(point, Val(N))
         for i = 1 : N
             ρ = zeros(N)
             ρ[i] = 1
@@ -14,29 +14,30 @@
             @test wrench.frame == frame
             force = FreeVector3D(frame, linear(wrench))
             torque = FreeVector3D(frame, angular(wrench))
-            @test torque ≈ point × force atol = 1e-12
+            @test torque ≈ position × force atol = 1e-12
             normalforce = force ⋅ normal
             @test normalforce > 0
             @test norm(force - normalforce * normal) <= μ * normalforce + 1e-12
         end
     end
-    let contactinfo = contactinfo
-        @test_noalloc MBC.wrenchbasis(contactinfo, Val(4))
+    let point = point
+        @test_noalloc MBC.wrenchbasis(point, Val(4))
     end
 end
 
-@testset "ContactSettings" begin
+@testset "ContactConfiguration" begin
     frame = CartesianFrame3D()
-    point = Point3D(frame, 1., 2., 3.)
+    position = Point3D(frame, 1., 2., 3.)
     normal = FreeVector3D(frame, normalize(SVector(1., 3., 2.)))
     μ = 0.5
-    contactinfo = ContactInfo(point, normal, μ)
-    settings = ContactSettings{4}(contactinfo)
+    point = ContactPoint(position, normal, μ)
+    ρ = SVector(ntuple(i -> Variable(i), Val(4)))
+    settings = ContactConfiguration(point, ρ)
     @test !MBC.isenabled(settings)
     settings.maxnormalforce = 1.0
     @test MBC.isenabled(settings)
     basis1 = MBC.wrenchbasis(settings, eye(Transform3D{Float64}, frame))
-    basis2 = MBC.wrenchbasis(contactinfo, Val(4))
+    basis2 = MBC.wrenchbasis(point, Val(4))
     @test angular(basis1) == angular(basis2)
     @test linear(basis1) == linear(basis2)
 end
@@ -45,13 +46,13 @@ end
     model = MockModel()
 
     frame = CartesianFrame3D()
-    point = Point3D(frame, 1., 2., 3.)
+    position = Point3D(frame, 1., 2., 3.)
     normal = FreeVector3D(frame, normalize(SVector(1., 3., 2.)))
     μ = 0.5
-    contactinfo = ContactInfo(point, normal, μ)
-    settings = ContactSettings{4}(contactinfo)
+    point = ContactPoint(position, normal, μ)
+    ρ = SVector(ntuple(i -> Variable(i), Val(4)))
+    settings = ContactConfiguration(point, ρ)
 
-    ρ = map(Variable, 1 : MBC.num_basis_vectors(settings))
     tf = eye(Transform3D{Float64}, frame)
     wrenchbasis = Parameter(@closure(() -> MBC.wrenchbasis(settings, tf)), model)
 

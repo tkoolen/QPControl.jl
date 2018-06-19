@@ -4,8 +4,8 @@ module MomentumBasedControl
 
 # Contact-related
 export
-    ContactInfo,
-    ContactSettings,
+    ContactPoint,
+    ContactConfiguration,
     disable!
 
 # Task-related

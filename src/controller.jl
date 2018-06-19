@@ -4,7 +4,7 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
     centroidalframe::CartesianFrame3D
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     externalwrenches::Dict{RigidBody{Float64}, Wrench{Float64}}
-    contactsettings::Dict{ContactSettings{N}, SVector{N, Variable}}
+    contactconfigurations::Dict{RigidBody{Float64}, ContactConfiguration{N}}
     qpmodel::SimpleQP.Model{Float64, O}
     v̇::Vector{Variable}
     objective::SimpleQP.LazyExpression # buffer to incrementally build the objective function
@@ -19,11 +19,11 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
         momentum_matrix = MomentumMatrix(worldframe, zeros(3, nv), zeros(3, nv))
         rootframe = root_frame(mechanism)
         externalwrenches = Dict(b => zero(Wrench{Float64}, rootframe) for b in bodies(mechanism))
-        contactsettings = Dict{ContactSettings{N}, SVector{N, Variable}}()
+        contactconfigurations = Dict{RigidBody{Float64}, ContactConfiguration{N}}()
         qpmodel = SimpleQP.Model(optimizer)
         v̇ = [Variable(qpmodel) for _ = 1 : nv]
         objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
-        new{N, O, typeof(state)}(state, result, centroidalframe, momentum_matrix, externalwrenches, contactsettings, qpmodel, v̇, objective, false)
+        new{N, O, typeof(state)}(state, result, centroidalframe, momentum_matrix, externalwrenches, contactconfigurations, qpmodel, v̇, objective, false)
     end
 end
 
@@ -86,14 +86,20 @@ function regularize!(controller::MomentumBasedController, joint::Joint, weight)
     task
 end
 
-function addcontact!(controller::MomentumBasedController{N}, contactsettings::ContactSettings{N}) where N
+function addcontact!(controller::MomentumBasedController{N}, body::RigidBody{Float64}, point::ContactPoint) where N
     model = controller.qpmodel
-    ρ = [Variable(model) for _ = 1 : N]
+    ρ = SVector(ntuple(_ -> Variable(model)), Val(N))
+    config = ContactConfiguration(point, ρ)
+    body_configs = get!(Vector{ContactConfiguration{N}}, controller.contactconfigurations, body)
+    push!(body_configs, config)
     @constraint(model, ρ >= zeros(N))
-    push!(controller.contactsettings, contactsettings => ρ)
+    weight = Parameter{Float64}(() -> config.weight, model)
+    controller.objective = @expression controller.objective + weight * (ρ ⋅ ρ)
+
+
     # TODO: maxnormalforce
     # TODO: objective term
-    nothing
+    config
 end
 
 @noinline function initialize!(controller::MomentumBasedController)
@@ -123,13 +129,13 @@ function add_wrench_balance_constraint!(controller::MomentumBasedController{N}) 
 
     torque = @expression angular(Wg)
     force = @expression linear(Wg)
-    for (contactsettings, ρjoint) in controller.contactsettings
-        wrenchbasis = Parameter(qpmodel) do # TODO: inference?
-            to_root = transform_to_root(state, contactsettings.info.localtransform.to) # TODO: make nicer
-            MBC.wrenchbasis(contactsettings, to_root)
+    for body_configs in values(controller.contactconfigurations)
+        for config in body_configs
+            ρ = config.ρ
+            basis = wrenchbasis(config, state, qpmodel)
+            torque = @expression torque + angular(basis) * ρ
+            force = @expression force + angular(basis) * ρ
         end
-        torque = @expression torque + angular(wrenchbasis) * ρjoint
-        force = @expression force + angular(wrenchbasis) * ρjoint
     end
 
     @constraint(qpmodel, angular(A) * v̇ + angular(Ȧv) == torque)
