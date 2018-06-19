@@ -29,12 +29,25 @@
     end
 end
 
+function set_up_valkyrie_contacts!(controller::MomentumBasedController)
+    valmechanism = controller.state.mechanism
+    for body in bodies(valmechanism)
+        for point in RBD.contact_points(body)
+            position = RBD.Contact.location(point)
+            normal = FreeVector3D(position.frame, 0.0, 0.0, 1.0)
+            μ = point.model.friction.μ
+            addcontact!(controller, body, ContactPoint(position, normal, μ))
+        end
+    end
+end
+
 @testset "zero velocity free fall" begin
     val = Valkyrie()
     mechanism = val.mechanism
     floatingjoint = val.basejoint
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    set_up_valkyrie_contacts!(controller)
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 

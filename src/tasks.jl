@@ -63,7 +63,7 @@ function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState,
 end
 
 
-struct MomentumRateTask
+struct MomentumRateTask <: AbstractMotionTask
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     desired::Base.RefValue{Wrench{Float64}}
 
@@ -110,7 +110,7 @@ function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇:
 end
 
 
-struct LinearMomentumRateTask
+struct LinearMomentumRateTask <: AbstractMotionTask
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     desired::Base.RefValue{FreeVector3D{SVector{3, Float64}}}
 

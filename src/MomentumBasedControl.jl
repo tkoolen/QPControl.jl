@@ -4,8 +4,8 @@ module MomentumBasedControl
 
 # Contact-related
 export
-    ContactInfo,
-    ContactSettings,
+    ContactPoint,
+    ContactQPData,
     disable!
 
 # Task-related
@@ -22,7 +22,8 @@ export
     MomentumBasedController,
     addtask!,
     addcontact!,
-    regularize!
+    regularize!,
+    centroidal_frame
 
 using Compat
 using RigidBodyDynamics
