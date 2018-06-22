@@ -45,8 +45,10 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
 
     copyto!(state, x)
     solve!(qpmodel)
-    @assert terminationstatus(qpmodel) == MOI.Success
-    @assert primalstatus(qpmodel) == MOI.FeasiblePoint
+    # @assert terminationstatus(qpmodel) == MOI.Success
+    # @assert primalstatus(qpmodel) == MOI.FeasiblePoint
+    @show terminationstatus(qpmodel) # FIXME
+    @show primalstatus(qpmodel) # FIXME
 
     result.v̇ .= value.(qpmodel, controller.v̇)
     empty!(contactwrenches)
@@ -133,8 +135,8 @@ function add_wrench_balance_constraint!(controller::MomentumBasedController{N}) 
     force = @expression linear(Wg)
     for contact_data_vec in values(controller.contactdata)
         for contactdata in contact_data_vec
-            torque = @expression torque + contactdata.wrench_world.angular
-            force = @expression force + contactdata.wrench_world.linear
+            torque = @expression torque + angular(contactdata.wrench_world)
+            force = @expression force + linear(contactdata.wrench_world)
         end
     end
 

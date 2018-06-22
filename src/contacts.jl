@@ -72,7 +72,7 @@ mutable struct ContactQPData{N}
 
         @constraint(model, force_local.v == basis * ρ)
         @constraint(model, ρ >= zeros(N))
-        @constraint(model, normalforcevec <= maxnormalforce)
+        # @constraint(model, normalforcevec <= maxnormalforce) # FIXME
         @constraint(model, linear(wrench_world) == rotation(toroot) * force_local.v)
         @constraint(model, angular(wrench_world) == hat(translation(toroot)) * linear(wrench_world))
 
