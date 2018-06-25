@@ -51,18 +51,16 @@ mutable struct ContactPoint{N}
 
         # constraints
         basis = Parameter(() -> forcebasis(ret.μ, Val(N)), model)
-        maxnormalforce = Parameter(x -> x[1] = ret.maxnormalforce, zeros(1), model)
+        maxρ = Parameter(x -> x .= ret.maxnormalforce / (N * sqrt(ret.μ^2 + 1)), zeros(N), model)
         toroot = Parameter{Transform3D{Float64}}(model) do
             localtransform = z_up_transform(ret.position, ret.normal, ret.normal_aligned_frame)
             transform_to_root(state, localtransform.to) * localtransform
         end
-        normalforcevec = [force_local.v[3]] # TODO: would be nicer with a scalar constraint for max normal force
-        hat = RigidBodyDynamics.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
         @constraint(model, ρ >= zeros(N))
-        @constraint(model, normalforcevec <= maxnormalforce)
+        @constraint(model, ρ <= maxρ)
         @constraint(model, linear(wrench_world) == rotation(toroot) * force_local.v)
-        @constraint(model, angular(wrench_world) == hat(translation(toroot)) * linear(wrench_world))
+        @constraint(model, angular(wrench_world) == translation(toroot) × linear(wrench_world))
 
         ret
     end
