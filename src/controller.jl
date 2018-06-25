@@ -45,8 +45,8 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
 
     copyto!(state, x)
     solve!(qpmodel)
-    @assert terminationstatus(qpmodel) == MOI.Success
-    @assert primalstatus(qpmodel) == MOI.FeasiblePoint
+    terminationstatus(qpmodel) == MOI.Success || error("termination status != MOI.Success")
+    primalstatus(qpmodel) == MOI.FeasiblePoint || error("primal status != MOI.FeasiblePoint")
 
     result.v̇ .= value.(qpmodel, controller.v̇)
     empty!(contactwrenches)
@@ -64,9 +64,9 @@ end
 
 function addtask!(controller::MomentumBasedController, task::AbstractMotionTask)
     model = controller.qpmodel
-    state = controller.state
-    v̇ = controller.v̇
-    @constraint(model, task_error(task, model, state, v̇) == zeros(dimension(task)))
+    err = task_error(task, model, controller.state, controller.v̇)
+    taskdim = dimension(task)
+    @constraint(model, err == zeros(taskdim))
     nothing
 end
 

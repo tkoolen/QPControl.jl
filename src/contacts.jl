@@ -56,11 +56,12 @@ mutable struct ContactPoint{N}
             localtransform = z_up_transform(ret.position, ret.normal, ret.normal_aligned_frame)
             transform_to_root(state, localtransform.to) * localtransform
         end
+        hat = RigidBodyDynamics.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
         @constraint(model, ρ >= zeros(N))
         @constraint(model, ρ <= maxρ)
         @constraint(model, linear(wrench_world) == rotation(toroot) * force_local.v)
-        @constraint(model, angular(wrench_world) == translation(toroot) × linear(wrench_world))
+        @constraint(model, angular(wrench_world) == hat(translation(toroot)) * linear(wrench_world)) # TODO: ×
 
         ret
     end

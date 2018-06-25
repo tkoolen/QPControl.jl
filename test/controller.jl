@@ -20,17 +20,13 @@
     τ = similar(velocity(state))
     controller(τ, 0.0, state)
     allocs = @allocated controller(τ, 0.0, state)
-    @test_broken allocs == 0
+    @test allocs == 0
 
     result = DynamicsResult(mechanism)
     dynamics!(result, state, τ)
     for joint in tree_joints(mechanism)
         @test result.v̇[joint] ≈ tasks[joint].desired atol = 1e-10
     end
-    allocs = @allocated controller(τ, 0.0, state)
-    @test_broken allocs == 0
-    @test allocs <= 384
-    @show allocs
 end
 
 function set_up_valkyrie_contacts!(controller::MomentumBasedController)
@@ -145,7 +141,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
 
         allocs = @allocated controller(τ, 0., state)
         @test_broken allocs == 0
-        @test allocs <= 29056
+        @test allocs <= 15488
         @show allocs
     end
 end
@@ -184,7 +180,5 @@ end
     @test isapprox(accel, desiredaccel, atol = 1e-8)
 
     allocs = @allocated controller(τ, 0., state)
-    @test_broken allocs == 0
-    @test allocs <= 1280
-    @show allocs
+    @test allocs == 0
 end

@@ -57,7 +57,7 @@ dimension(task::JointAccelerationTask) = length(task.desired)
 setdesired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
 
 function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    desired = Parameter(() -> task.desired, qpmodel)
+    desired = Parameter(identity, task.desired, qpmodel)
     v̇joint = v̇[velocity_range(state, task.joint)]
     @expression desired - v̇joint
 end
