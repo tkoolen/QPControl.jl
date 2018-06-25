@@ -5,7 +5,6 @@ module MomentumBasedControl
 # Contact-related
 export
     ContactPoint,
-    ContactQPData,
     disable!
 
 # Task-related

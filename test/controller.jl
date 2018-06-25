@@ -27,6 +27,10 @@
     for joint in tree_joints(mechanism)
         @test result.v̇[joint] ≈ tasks[joint].desired atol = 1e-10
     end
+    allocs = @allocated controller(τ, 0.0, state)
+    @test_broken allocs == 0
+    @test allocs <= 384
+    @show allocs
 end
 
 function set_up_valkyrie_contacts!(controller::MomentumBasedController)
