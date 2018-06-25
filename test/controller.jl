@@ -78,97 +78,97 @@ end
     end
 end
 
-@testset "achievable momentum rate" begin
-    val = Valkyrie()
-    mechanism = val.mechanism
-    floatingjoint = val.basejoint
-    state = MechanismState(mechanism)
-    τ = similar(velocity(state))
-
-    N = 4
-    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
-    set_up_valkyrie_contacts!(controller)
-    ḣtask = MomentumRateTask(mechanism, centroidal_frame(controller))
-    addtask!(controller, ḣtask)#, 1.0)
-
-    for joint in tree_joints(mechanism)
-        regularize!(controller, joint, 1e-12)
-    end
-
-    srand(1)
-    for p in linspace(0., 1., 5)
-        rand!(state)
-        com = center_of_mass(state)
-        centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
-        world_to_centroidal = inv(centroidal_to_world)
-
-        # set random active contacts and random achievable wrench
-        fg = world_to_centroidal * (mass(mechanism) * mechanism.gravitational_acceleration)
-        ḣdes = Wrench(zero(fg), fg)
-        for foot in values(val.feet)
-            for contact in controller.contactdata[foot]
-                active = rand() < p
-                if active
-                    r = contact.point.position
-                    μ = rand()
-                    normal = FreeVector3D(r.frame, normalize(randn(SVector{3})))
-                    contact.point = ContactPoint(r, normal, μ)
-                    contact.weight = 1e-12
-                    contact.maxnormalforce = Inf
-                    fnormal = 50. * rand()
-                    μreduced = sqrt(2) / 2 * μ # due to polyhedral inner approximation; assumes 4 basis vectors or more
-                    ftangential = μreduced * fnormal * rand() * cross(normal, FreeVector3D(normal.frame, normalize(randn(SVector{3}))))
-                    f = fnormal * normal + ftangential
-                    @assert isapprox(ftangential ⋅ normal, 0., atol = 1e-12)
-                    @assert norm(f - (normal ⋅ f) * normal) ≤ μreduced * (normal ⋅ f)
-                    wrench = Wrench(r, f)
-                    ḣdes += transform(wrench, world_to_centroidal * transform_to_root(state, wrench.frame))
-                else
-                    disable!(contact)
-                end
-            end
-        end
-        setdesired!(ḣtask, ḣdes)
-
-        controller(τ, 0., state)
-
-        # Ensure that desired momentum rate is achieved.
-        ḣ = Wrench(momentum_matrix(state), controller.result.v̇) + momentum_rate_bias(state)
-        ḣ = transform(ḣ, world_to_centroidal)
-        @test isapprox(ḣdes, ḣ; atol = 1.0)
-    end
-end
-
-# @testset "spatial acceleration" begin
+# @testset "achievable momentum rate" begin
 #     val = Valkyrie()
 #     mechanism = val.mechanism
 #     floatingjoint = val.basejoint
 #     state = MechanismState(mechanism)
 #     τ = similar(velocity(state))
 
-#     srand(533)
-#     rand!(state)
-#     controller = MomentumBasedController(mechanism, defaultoptimizer())
-#     body = val.feet[left]
-#     base = val.palms[right]
-#     frame = default_frame(base)
-#     task = SpatialAccelerationTask(num_velocities(mechanism), path(mechanism, base, body), frame, eye(3), eye(3))
-#     add!(controller, task)
+#     N = 4
+#     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+#     set_up_valkyrie_contacts!(controller)
+#     ḣtask = MomentumRateTask(mechanism, centroidal_frame(controller))
+#     addtask!(controller, ḣtask)#, 1.0)
 
-#     result = DynamicsResult(mechanism)
-#     accels = result.accelerations
-#     for weight in [1., Inf]
-#         reset!(controller)
-#         if isinf(weight)
-#             regularize_joint_accels!(controller, 1.)
+#     for joint in tree_joints(mechanism)
+#         regularize!(controller, joint, 1e-12)
+#     end
+
+#     srand(1)
+#     for p in linspace(0., 1., 5)
+#         rand!(state)
+#         com = center_of_mass(state)
+#         centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
+#         world_to_centroidal = inv(centroidal_to_world)
+
+#         # set random active contacts and random achievable wrench
+#         fg = world_to_centroidal * (mass(mechanism) * mechanism.gravitational_acceleration)
+#         ḣdes = Wrench(zero(fg), fg)
+#         for foot in values(val.feet)
+#             for contact in controller.contactdata[foot]
+#                 active = rand() < p
+#                 if active
+#                     r = contact.point.position
+#                     μ = rand()
+#                     normal = FreeVector3D(r.frame, normalize(randn(SVector{3})))
+#                     contact.point = ContactPoint(r, normal, μ)
+#                     contact.weight = 1e-12
+#                     contact.maxnormalforce = Inf
+#                     fnormal = 50. * rand()
+#                     μreduced = sqrt(2) / 2 * μ # due to polyhedral inner approximation; assumes 4 basis vectors or more
+#                     ftangential = μreduced * fnormal * rand() * cross(normal, FreeVector3D(normal.frame, normalize(randn(SVector{3}))))
+#                     f = fnormal * normal + ftangential
+#                     @assert isapprox(ftangential ⋅ normal, 0., atol = 1e-12)
+#                     @assert norm(f - (normal ⋅ f) * normal) ≤ μreduced * (normal ⋅ f)
+#                     wrench = Wrench(r, f)
+#                     ḣdes += transform(wrench, world_to_centroidal * transform_to_root(state, wrench.frame))
+#                 else
+#                     disable!(contact)
+#                 end
+#             end
 #         end
-#         desiredaccel = rand(SpatialAcceleration{Float64}, default_frame(body), default_frame(base), frame)
-#         set!(task, desiredaccel, weight)
+#         setdesired!(ḣtask, ḣdes)
+
 #         controller(τ, 0., state)
-#         v̇ = controller.result.v̇
-#         spatial_accelerations!(accels, state, v̇)
-#         accel = relative_acceleration(accels, body, base)
-#         accel = transform(state, accel, frame)
-#         @test isapprox(accel, desiredaccel, atol = 1e-8)
+
+#         # Ensure that desired momentum rate is achieved.
+#         ḣ = Wrench(momentum_matrix(state), controller.result.v̇) + momentum_rate_bias(state)
+#         ḣ = transform(ḣ, world_to_centroidal)
+#         @test isapprox(ḣdes, ḣ; atol = 1.0)
 #     end
 # end
+
+@testset "spatial acceleration, constrained = $constrained" for constrained in [true, false]
+    val = Valkyrie()
+    mechanism = val.mechanism
+    floatingjoint = val.basejoint
+    state = MechanismState(mechanism)
+    τ = similar(velocity(state))
+
+    srand(533)
+    rand!(state)
+    N = 4
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    body = val.feet[left]
+    base = val.palms[right]
+    frame = default_frame(base)
+    task = SpatialAccelerationTask(mechanism, path(mechanism, base, body), frame=frame)
+
+    result = DynamicsResult(mechanism)
+    accels = result.accelerations
+    if constrained
+        addtask!(controller, task)
+        regularize!.(controller, tree_joints(mechanism), 1.0)
+    else
+        addtask!(controller, task, 1.0)
+    end
+    desiredaccel = rand(SpatialAcceleration{Float64}, default_frame(body), default_frame(base), frame)
+    setdesired!(task, desiredaccel)
+    controller(τ, 0., state)
+    v̇ = controller.result.v̇
+    spatial_accelerations!(accels, state, v̇)
+    accel = relative_acceleration(accels, body, base)
+    accel = transform(state, accel, frame)
+    @test isapprox(accel, desiredaccel, atol = 1e-8)
+end

@@ -45,10 +45,8 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
 
     copyto!(state, x)
     solve!(qpmodel)
-    # @assert terminationstatus(qpmodel) == MOI.Success
-    # @assert primalstatus(qpmodel) == MOI.FeasiblePoint
-    @show terminationstatus(qpmodel) # FIXME
-    @show primalstatus(qpmodel) # FIXME
+    @assert terminationstatus(qpmodel) == MOI.Success
+    @assert primalstatus(qpmodel) == MOI.FeasiblePoint
 
     result.v̇ .= value.(qpmodel, controller.v̇)
     empty!(contactwrenches)
