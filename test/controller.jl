@@ -138,6 +138,11 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
         ḣ = Wrench(momentum_matrix(state), controller.result.v̇) + momentum_rate_bias(state)
         ḣ = transform(ḣ, world_to_centroidal)
         @test isapprox(ḣdes, ḣ; atol = 1e-3)
+
+        allocs = @allocated controller(τ, 0., state)
+        @test_broken allocs == 0
+        @test allocs <= 29056
+        @show allocs
     end
 end
 
@@ -173,4 +178,9 @@ end
     accel = relative_acceleration(accels, body, base)
     accel = transform(state, accel, frame)
     @test isapprox(accel, desiredaccel, atol = 1e-8)
+
+    allocs = @allocated controller(τ, 0., state)
+    @test_broken allocs == 0
+    @test allocs <= 1280
+    @show allocs
 end
