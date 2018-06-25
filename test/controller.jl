@@ -36,7 +36,7 @@ function set_up_valkyrie_contacts!(controller::MomentumBasedController)
             position = RBD.Contact.location(point)
             normal = FreeVector3D(position.frame, 0.0, 0.0, 1.0)
             μ = point.model.friction.μ
-            addcontact!(controller, body, ContactPoint(position, normal, μ))
+            addcontact!(controller, body, position, normal, μ)
         end
     end
 end

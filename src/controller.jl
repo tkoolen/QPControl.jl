@@ -3,7 +3,7 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
     result::DynamicsResult{Float64, Float64}
     centroidalframe::CartesianFrame3D
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
-    contactdata::Dict{RigidBody{Float64}, Vector{ContactQPData{N}}}
+    contacts::Dict{RigidBody{Float64}, Vector{ContactPoint{N}}}
     contactwrenches::Dict{BodyID, Wrench{Float64}}
     qpmodel::SimpleQP.Model{Float64, O}
     v̇::Vector{Variable}
@@ -18,13 +18,13 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
         nv = num_velocities(state)
         momentum_matrix = MomentumMatrix(worldframe, zeros(3, nv), zeros(3, nv))
         rootframe = root_frame(mechanism)
-        contactdata = Dict{RigidBody{Float64}, Vector{ContactQPData{N}}}()
+        contacts = Dict{RigidBody{Float64}, Vector{ContactPoint{N}}}()
         contactwrenches = Dict{BodyID, Wrench{Float64}}()
         qpmodel = SimpleQP.Model(optimizer)
         v̇ = [Variable(qpmodel) for _ = 1 : nv]
         objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
         new{N, O, typeof(state)}(
-            state, result, centroidalframe, momentum_matrix, contactdata, contactwrenches, qpmodel, v̇, objective, false)
+            state, result, centroidalframe, momentum_matrix, contacts, contactwrenches, qpmodel, v̇, objective, false)
     end
 end
 
@@ -39,7 +39,7 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     qpmodel = controller.qpmodel
     state = controller.state
     result = controller.result
-    contactdata = controller.contactdata
+    contacts = controller.contacts
     contactwrenches = controller.contactwrenches
     worldframe = root_frame(state.mechanism)
 
@@ -50,9 +50,9 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
 
     result.v̇ .= value.(qpmodel, controller.v̇)
     empty!(contactwrenches)
-    for body in keys(controller.contactdata)
+    for body in keys(controller.contacts)
         contactwrench = zero(Wrench{Float64}, worldframe)
-        for data in controller.contactdata[body]
+        for data in controller.contacts[body]
             contactwrench += value(qpmodel, data.wrench_world)
         end
         contactwrenches[BodyID(body)] = contactwrench
@@ -98,12 +98,19 @@ function regularize!(controller::MomentumBasedController, joint::Joint, weight)
     task
 end
 
-function addcontact!(controller::MomentumBasedController{N}, body::RigidBody{Float64}, point::ContactPoint) where N
-    contactdata = ContactQPData{N}(point, controller.state, controller.qpmodel)
-    push!(get!(Vector{ContactQPData{N}}, controller.contactdata, body), contactdata)
-    objterm = objectiveterm(contactdata, controller.qpmodel)
+function addcontact!(
+        controller::MomentumBasedController{N}, body::RigidBody{Float64},
+        point::ContactPoint{N}) where N
+    push!(get!(Vector{ContactPoint{N}}, controller.contacts, body), point)
+    objterm = objectiveterm(point, controller.qpmodel)
     controller.objective = @expression controller.objective + objterm # TODO: currently kind of inefficient; would be better to have a single multi-arg addition
-    contactdata
+    point
+end
+
+function addcontact!(
+        controller::MomentumBasedController{N}, body::RigidBody{Float64},
+        position::Point3D, normal::FreeVector3D, μ::Float64) where N
+    addcontact!(controller, body, ContactPoint{N}(position, normal, μ, controller.state, controller.qpmodel))
 end
 
 @noinline function initialize!(controller::MomentumBasedController)
@@ -131,10 +138,10 @@ function add_wrench_balance_constraint!(controller::MomentumBasedController{N}) 
 
     torque = @expression angular(Wg)
     force = @expression linear(Wg)
-    for contact_data_vec in values(controller.contactdata)
-        for contactdata in contact_data_vec
-            torque = @expression torque + angular(contactdata.wrench_world)
-            force = @expression force + linear(contactdata.wrench_world)
+    for contactvec in values(controller.contacts)
+        for contacts in contactvec
+            torque = @expression torque + angular(contacts.wrench_world)
+            force = @expression force + linear(contacts.wrench_world)
         end
     end
 

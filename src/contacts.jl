@@ -22,35 +22,24 @@ function forcebasis(μ::Float64, num_basis_vectors::Val{N}) where N
     hcat(basisvectors...)
 end
 
-struct ContactPoint
-    position::Point3D{SVector{3, Float64}}
-    normal::FreeVector3D{SVector{3, Float64}}
-    μ::Float64
-    localtransform::Transform3D{Float64}
-
-    function ContactPoint(
-            position::Point3D{SVector{3, Float64}},
-            normal::FreeVector3D{SVector{3, Float64}},
-            μ::Float64)
-        normal_aligned_frame = CartesianFrame3D()
-        localtransform = z_up_transform(position, normal, normal_aligned_frame)
-        new(position, normal, μ, localtransform)
-    end
-end
-
 nvars(model::SimpleQP.Model, ::Val{N}) where {N} = SVector(ntuple(_ -> Variable(model), Val(N)))
 
-mutable struct ContactQPData{N}
+mutable struct ContactPoint{N}
+    normal_aligned_frame::CartesianFrame3D
     ρ::SVector{N, Variable} # basis vector multipliers
     force_local::FreeVector3D{SVector{3, Variable}} # contact force expressed in contact point's normal-aligned frame
     wrench_world::Wrench{Variable}
-    point::ContactPoint
+    position::Point3D{SVector{3, Float64}}
+    normal::FreeVector3D{SVector{3, Float64}}
+    μ::Float64
     weight::Float64
     maxnormalforce::Float64
 
-    function ContactQPData{N}(point::ContactPoint, state::MechanismState, model::SimpleQP.Model) where N
+    function ContactPoint{N}(
+            position::Point3D, normal::FreeVector3D, μ::Float64,
+            state::MechanismState, model::SimpleQP.Model) where N
         # frames
-        normal_aligned_frame = point.localtransform.from # assumed not to change
+        normal_aligned_frame = CartesianFrame3D() # assumed not to change
         worldframe = root_frame(state.mechanism)
 
         # variables
@@ -58,13 +47,13 @@ mutable struct ContactQPData{N}
         force_local = FreeVector3D(normal_aligned_frame, nvars(model, Val(3)))
         wrench_world = Wrench(worldframe, nvars(model, Val(3)), nvars(model, Val(3)))
 
-        ret = new{N}(ρ, force_local, wrench_world, point, 0.0, 0.0)
+        ret = new{N}(normal_aligned_frame, ρ, force_local, wrench_world, position, normal, μ, 0.0, 0.0)
 
         # constraints
-        basis = Parameter(() -> forcebasis(ret.point.μ, Val(N)), model)
+        basis = Parameter(() -> forcebasis(ret.μ, Val(N)), model)
         maxnormalforce = Parameter(x -> x[1] = ret.maxnormalforce, zeros(1), model)
         toroot = Parameter{Transform3D{Float64}}(model) do
-            localtransform = point.localtransform
+            localtransform = z_up_transform(ret.position, ret.normal, ret.normal_aligned_frame)
             transform_to_root(state, localtransform.to) * localtransform
         end
         normalforcevec = [force_local.v[3]] # TODO: would be nicer with a scalar constraint for max normal force
@@ -79,12 +68,12 @@ mutable struct ContactQPData{N}
     end
 end
 
-disable!(data::ContactQPData) = data.maxnormalforce = 0
-isenabled(data::ContactQPData) = data.maxnormalforce > 0
+disable!(point::ContactPoint) = point.maxnormalforce = 0
+isenabled(point::ContactPoint) = point.maxnormalforce > 0
 
-function objectiveterm(data::ContactQPData, model::SimpleQP.Model)
-    weight = Parameter{Float64}(() -> data.weight, model)
-    f = data.force_local
+function objectiveterm(point::ContactPoint, model::SimpleQP.Model)
+    weight = Parameter{Float64}(() -> point.weight, model)
+    f = point.force_local
     @expression weight * (f ⋅ f)
 end
 
