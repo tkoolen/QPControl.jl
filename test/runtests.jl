@@ -39,7 +39,6 @@ function defaultoptimizer()
     optimizer
 end
 
-# include("contacts.jl")
 include("tasks.jl")
 include("controller.jl")
 # include("notebooks.jl")
