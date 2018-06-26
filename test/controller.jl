@@ -76,6 +76,8 @@ end
             @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-6)
         end
     end
+    allocs = @allocated controller(τ, 0., state)
+    @test allocs == 0
 end
 
 const MAX_NORMAL_FORCE_FIXME = 1e9
@@ -140,9 +142,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
         @test isapprox(ḣdes, ḣ; atol = 1e-3)
 
         allocs = @allocated controller(τ, 0., state)
-        @test_broken allocs == 0
-        @test allocs <= 15488
-        @show allocs
+        @test allocs == 0
     end
 end
 

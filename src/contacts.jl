@@ -52,9 +52,11 @@ mutable struct ContactPoint{N}
         # constraints
         basis = Parameter(() -> forcebasis(ret.μ, Val(N)), model)
         maxρ = Parameter(x -> x .= ret.maxnormalforce / (N * sqrt(ret.μ^2 + 1)), zeros(N), model)
-        toroot = Parameter{Transform3D{Float64}}(model) do
-            localtransform = z_up_transform(ret.position, ret.normal, ret.normal_aligned_frame)
-            transform_to_root(state, localtransform.to) * localtransform
+        toroot = let state = state, ret = ret
+            Parameter{Transform3D{Float64}}(model) do
+                localtransform = z_up_transform(ret.position, ret.normal, ret.normal_aligned_frame)
+                transform_to_root(state, localtransform.to) * localtransform
+            end
         end
         hat = RigidBodyDynamics.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
@@ -77,7 +79,11 @@ function objectiveterm(point::ContactPoint, model::SimpleQP.Model)
 end
 
 # TODO: type piracy:
-function SimpleQP.value(model::SimpleQP.Model, wrench::Wrench{Variable})
-    # TODO: Ref probably allocates on 0.6
-    Wrench(wrench.frame, value.(Ref(model), angular(wrench)), value.(Ref(model), linear(wrench)))
+function SimpleQP.value(m::SimpleQP.Model, wrench::Wrench{Variable})
+    # Wrench(wrench.frame, value.(Ref(m), angular(wrench)), value.(Ref(m), linear(wrench))) # allocates on 0.6
+    τ = angular(wrench)
+    f = linear(wrench)
+    @inbounds τval = SVector(value(m, τ[1]), value(m, τ[2]), value(m, τ[3]))
+    @inbounds fval = SVector(value(m, f[1]), value(m, f[2]), value(m, f[3]))
+    return Wrench(wrench.frame, τval, fval)
 end

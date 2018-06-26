@@ -28,6 +28,8 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
     end
 end
 
+Base.show(io::IO, controller::MomentumBasedController{N, O, S}) where {N, O, S} = print(io, "MomentumBasedController{$N, $O, $S}(…)")
+
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
 function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
