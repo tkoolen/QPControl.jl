@@ -8,7 +8,6 @@ using ValkyrieRobot
 using StaticArrays
 using Rotations
 using Compat.Test
-using FastClosures
 using MathOptInterface
 using OSQP.MathOptInterfaceOSQP
 using SimpleQP
