@@ -8,7 +8,6 @@ using ValkyrieRobot
 using StaticArrays
 using Rotations
 using Compat.Test
-using FastClosures
 using MathOptInterface
 using OSQP.MathOptInterfaceOSQP
 using SimpleQP
@@ -39,7 +38,6 @@ function defaultoptimizer()
     optimizer
 end
 
-include("contacts.jl")
 include("tasks.jl")
 include("controller.jl")
 # include("notebooks.jl")

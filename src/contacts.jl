@@ -1,47 +1,89 @@
-struct ContactInfo
-    point::Point3D{SVector{3, Float64}}
-    normal::FreeVector3D{SVector{3, Float64}}
-    μ::Float64
-    localtransform::Transform3D{Float64} # from frame with origin at point and normal as z-axis to frame in which point and normal are expressed
+"""
+    z_up_transform(origin::Point3D, zaxis::FreeVector3D, from::CartesianFrame3D)
 
-    function ContactInfo(point::Point3D{SVector{3, Float64}}, normal::FreeVector3D{SVector{3, Float64}}, μ::Float64)
-        @framecheck point.frame normal.frame
-        point_origin_normal_z = CartesianFrame3D()
-        z = SVector(0., 0., 1.)
-        rot = Rotations.rotation_between(z, normal.v)
-        localtransform = Transform3D(point_origin_normal_z, point.frame, rot, point.v)
-        new(point, normal, μ, localtransform)
-    end
+Return `Transform3D` from `from` to the frame in which both `origin` and `zaxis`
+is expressed, such that z-axis of `from` is `zaxis`, and origin of `from` is
+`origin`.
+"""
+function z_up_transform(origin::Point3D, zaxis::FreeVector3D, from::CartesianFrame3D)
+    @framecheck origin.frame zaxis.frame
+    to = origin.frame
+    rotation = Rotations.rotation_between(SVector(0., 0., 1.), zaxis.v)
+    translation = origin.v
+    Transform3D(from, to, rotation, translation)
 end
 
-function wrenchbasis(info::ContactInfo, num_basis_vectors::Val{N},
-        body_to_desired::Transform3D = eye(Transform3D{Float64}, info.localtransform.to)) where N
+function forcebasis(μ::Float64, num_basis_vectors::Val{N}) where N
     Δθ = 2 * π / N
-    μ = info.μ
-    basis_vectors = ntuple(num_basis_vectors) do i
+    basisvectors = ntuple(num_basis_vectors) do i
         θ = (i - 1) * Δθ
         normalize(SVector(μ * cos(θ), μ * sin(θ), 1.0))
     end
-    linear = hcat(basis_vectors...)
-    angular = zero(linear)
-    wrenchmatrix = WrenchMatrix(info.localtransform.from, angular, linear)
-    transform(wrenchmatrix, body_to_desired * info.localtransform)
+    hcat(basisvectors...)
 end
 
-mutable struct ContactSettings{N}
-    contactinfo::ContactInfo
+nvars(model::SimpleQP.Model, ::Val{N}) where {N} = SVector(ntuple(_ -> Variable(model), Val(N)))
+
+mutable struct ContactPoint{N}
+    normal_aligned_frame::CartesianFrame3D
+    ρ::SVector{N, Variable} # basis vector multipliers
+    force_local::FreeVector3D{SVector{3, Variable}} # contact force expressed in contact point's normal-aligned frame
+    wrench_world::Wrench{Variable}
+    position::Point3D{SVector{3, Float64}}
+    normal::FreeVector3D{SVector{3, Float64}}
+    μ::Float64
     weight::Float64
     maxnormalforce::Float64
 
-    function ContactSettings{N}(contactinfo::ContactInfo) where N
-        new{N}(contactinfo, 0.0, 0.0)
+    function ContactPoint{N}(
+            position::Point3D, normal::FreeVector3D, μ::Float64,
+            state::MechanismState, model::SimpleQP.Model) where N
+        # frames
+        normal_aligned_frame = CartesianFrame3D() # assumed not to change
+        worldframe = root_frame(state.mechanism)
+
+        # variables
+        ρ = nvars(model, Val(N))
+        force_local = FreeVector3D(normal_aligned_frame, nvars(model, Val(3)))
+        wrench_world = Wrench(worldframe, nvars(model, Val(3)), nvars(model, Val(3)))
+
+        ret = new{N}(normal_aligned_frame, ρ, force_local, wrench_world, position, normal, μ, 0.0, 0.0)
+
+        # constraints
+        basis = Parameter(() -> forcebasis(ret.μ, Val(N)), model)
+        maxρ = Parameter(x -> x .= ret.maxnormalforce / (N * sqrt(ret.μ^2 + 1)), zeros(N), model)
+        toroot = let state = state, ret = ret
+            Parameter{Transform3D{Float64}}(model) do
+                localtransform = z_up_transform(ret.position, ret.normal, ret.normal_aligned_frame)
+                transform_to_root(state, localtransform.to) * localtransform
+            end
+        end
+        hat = RigidBodyDynamics.Spatial.hat
+        @constraint(model, force_local.v == basis * ρ)
+        @constraint(model, ρ >= zeros(N))
+        @constraint(model, ρ <= maxρ)
+        @constraint(model, linear(wrench_world) == rotation(toroot) * force_local.v)
+        @constraint(model, angular(wrench_world) == hat(translation(toroot)) * linear(wrench_world)) # TODO: ×
+
+        ret
     end
 end
 
-disable!(settings::ContactSettings) = settings.maxnormalforce = 0
-isenabled(settings::ContactSettings) = settings.maxnormalforce > 0
-num_basis_vectors(::ContactSettings{N}) where {N} = N
+disable!(point::ContactPoint) = point.maxnormalforce = 0
+isenabled(point::ContactPoint) = point.maxnormalforce > 0
 
-function wrenchbasis(settings::ContactSettings{N}, body_to_desired::Transform3D) where N
-    wrenchbasis(settings.contactinfo, Val(N), body_to_desired)
+function objectiveterm(point::ContactPoint, model::SimpleQP.Model)
+    weight = Parameter{Float64}(() -> point.weight, model)
+    f = point.force_local
+    @expression weight * (f ⋅ f)
+end
+
+# TODO: type piracy:
+function SimpleQP.value(m::SimpleQP.Model, wrench::Wrench{Variable})
+    # Wrench(wrench.frame, value.(Ref(m), angular(wrench)), value.(Ref(m), linear(wrench))) # allocates on 0.6
+    τ = angular(wrench)
+    f = linear(wrench)
+    @inbounds τval = SVector(value(m, τ[1]), value(m, τ[2]), value(m, τ[3]))
+    @inbounds fval = SVector(value(m, f[1]), value(m, f[2]), value(m, f[3]))
+    return Wrench(wrench.frame, τval, fval)
 end

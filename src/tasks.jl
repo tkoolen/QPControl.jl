@@ -44,6 +44,46 @@ function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismStat
 end
 
 
+struct AngularAccelerationTask <: AbstractMotionTask
+    path::TreePath{RigidBody{Float64}, Joint{Float64}}
+    jacobian::GeometricJacobian{Matrix{Float64}}
+    desired::Base.RefValue{FreeVector3D{SVector{3, Float64}}}
+
+    function AngularAccelerationTask(
+                mechanism::Mechanism, # TODO: would be nice to get rid of this; possible if compact Jacobians were available
+                path::TreePath{RigidBody{Float64}, Joint{Float64}};
+                frame::CartesianFrame3D = default_frame(target(path)))
+        nv = num_velocities(mechanism)
+        bodyframe = default_frame(target(path))
+        baseframe = default_frame(source(path))
+        jacobian = GeometricJacobian(bodyframe, baseframe, frame, zeros(3, nv), zeros(3, nv))
+        desired = Ref(FreeVector3D(frame, 0.0, 0.0, 0.0))
+        new(path, jacobian, desired)
+    end
+end
+
+dimension(task::AngularAccelerationTask) = 3
+
+function setdesired!(task::AngularAccelerationTask, desired::FreeVector3D)
+    @framecheck task.desired[].frame desired.frame
+    task.desired[] = desired
+    nothing
+end
+
+function task_error(task::AngularAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+    J = Parameter(task.jacobian, qpmodel) do jac
+        world_to_desired = inv(transform_to_root(state, task.desired[].frame))
+        geometric_jacobian!(jac, state, task.path, world_to_desired)
+    end
+    J̇v = Parameter{SpatialAcceleration{Float64}}(qpmodel) do
+        bias = -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
+        transform(state, bias, task.desired[].frame)
+    end
+    desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
+    @expression desired - (angular(J) * v̇ + angular(J̇v))
+end
+
+
 struct JointAccelerationTask{JT<:JointType{Float64}} <: AbstractMotionTask
     joint::Joint{Float64, JT}
     desired::Vector{Float64}
@@ -57,13 +97,13 @@ dimension(task::JointAccelerationTask) = length(task.desired)
 setdesired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
 
 function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
-    desired = Parameter(() -> task.desired, qpmodel)
+    desired = Parameter(identity, task.desired, qpmodel)
     v̇joint = v̇[velocity_range(state, task.joint)]
     @expression desired - v̇joint
 end
 
 
-struct MomentumRateTask
+struct MomentumRateTask <: AbstractMotionTask
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     desired::Base.RefValue{Wrench{Float64}}
 
@@ -110,14 +150,14 @@ function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇:
 end
 
 
-struct LinearMomentumRateTask
+struct LinearMomentumRateTask <: AbstractMotionTask
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     desired::Base.RefValue{FreeVector3D{SVector{3, Float64}}}
 
     function LinearMomentumRateTask(mechanism::Mechanism, centroidalframe::CartesianFrame3D = CartesianFrame3D())
         nv = num_velocities(mechanism)
         momentum_matrix = MomentumMatrix(centroidalframe, zeros(3, nv), zeros(3, nv))
-        desired = Ref(zero(FreeVector3D{SVector{3, Float64}}, centroidalframe))
+        desired = Ref(FreeVector3D(centroidalframe, 0.0, 0.0, 0.0))
         new(momentum_matrix, desired)
     end
 end
@@ -131,6 +171,6 @@ end
 
 function task_error(task::LinearMomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
-    desired = Parameter(@closure(() -> task.desired[].v), qpmodel)
+    desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
     @expression desired - (angular(A) * v̇ + angular(Ȧv))
 end

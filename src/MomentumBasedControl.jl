@@ -4,14 +4,14 @@ module MomentumBasedControl
 
 # Contact-related
 export
-    ContactInfo,
-    ContactSettings,
+    ContactPoint,
     disable!
 
 # Task-related
 export
     AbstractMotionTask,
     SpatialAccelerationTask,
+    AngularAccelerationTask,
     JointAccelerationTask,
     MomentumRateTask,
     LinearMomentumRateTask,
@@ -22,7 +22,8 @@ export
     MomentumBasedController,
     addtask!,
     addcontact!,
-    regularize!
+    regularize!,
+    centroidal_frame
 
 using Compat
 using RigidBodyDynamics
@@ -32,7 +33,6 @@ using RigidBodyDynamics.PDControl
 using SimpleQP
 using StaticArrays
 using Rotations
-using FastClosures # TODO: necessary?
 
 import MathOptInterface
 
@@ -41,6 +41,5 @@ const MOI = MathOptInterface
 include("contacts.jl")
 include("tasks.jl")
 include("controller.jl")
-# include("util.jl")
 
 end # module
