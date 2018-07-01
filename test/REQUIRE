@@ -1,5 +1,7 @@
 NBInclude
 ValkyrieRobot
+AtlasRobot
+MathOptInterface
 OSQP 0.1.6
 RigidBodySim 0.2.0
 MeshCatMechanisms
