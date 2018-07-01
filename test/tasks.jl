@@ -14,7 +14,7 @@
     end
     for (joint, task) in tasks
         err = MBC.task_error(task, qpmodel, state, v̇)
-        @test map(f -> f(Dict(zip(v̇, v̇vals))), err()) == task.desired .- v̇vals[joint]
+        @test map(f -> f(Dict(zip(v̇, v̇vals))), err()) == v̇vals[joint] .- task.desired
         allocs = @allocated err()
         @test allocs == 0
     end
@@ -42,7 +42,7 @@ end
         zero_velocity!(state)
         v̇0 = zeros(length(v̇))
         setdirty!(qpmodel)
-        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(desired)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(desired)
 
         MBC.setdesired!(task, zero(desired))
         setdirty!(qpmodel)
@@ -50,12 +50,12 @@ end
         rand_velocity!(state)
         biasaccel = transform(state, -RBD.bias_acceleration(state, base) + RBD.bias_acceleration(state, body), bodyframe)
         setdirty!(qpmodel)
-        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(biasaccel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(biasaccel)
 
         zero_velocity!(state)
         setdirty!(qpmodel)
         v̇rand = rand(nv)
-        expected = Array(transform(state, -SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe))
+        expected = Array(transform(state, SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe))
         @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ expected atol = 1e-12
 
         allocs = @allocated err()
@@ -81,19 +81,19 @@ end
     zero_velocity!(state)
     setdirty!(qpmodel)
     v̇0 = zeros(length(v̇))
-    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(desired)
+    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(desired)
 
     MBC.setdesired!(task, zero(desired))
     rand_velocity!(state)
     setdirty!(qpmodel)
     world_to_centroidal = Transform3D(root_frame(mechanism), centroidalframe, -center_of_mass(state).v)
     Ȧv = transform(momentum_rate_bias(state), world_to_centroidal)
-    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(Ȧv)
+    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(Ȧv)
 
     zero_velocity!(state)
     setdirty!(qpmodel)
     v̇rand = rand(nv)
-    expected = -transform(Wrench(momentum_matrix(state), v̇rand), world_to_centroidal)
+    expected = transform(Wrench(momentum_matrix(state), v̇rand), world_to_centroidal)
     @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ Array(expected) atol = 1e-12
 
     allocs = @allocated err()

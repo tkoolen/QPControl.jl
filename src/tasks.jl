@@ -39,8 +39,8 @@ function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismStat
     end
     desired = Parameter{SpatialAcceleration{Float64}}(() -> task.desired[], qpmodel)
     @expression [
-        angular(desired) - (angular(J) * v̇ + angular(J̇v));
-        linear(desired) - (linear(J) * v̇ + linear(J̇v))]
+        angular(J) * v̇ + angular(J̇v) - angular(desired);
+        linear(J) * v̇ + linear(J̇v) - linear(desired)]
 end
 
 
@@ -80,7 +80,7 @@ function task_error(task::AngularAccelerationTask, qpmodel, state::MechanismStat
         transform(state, bias, task.desired[].frame)
     end
     desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
-    @expression desired - (angular(J) * v̇ + angular(J̇v))
+    @expression angular(J) * v̇ + angular(J̇v) - desired
 end
 
 
@@ -99,7 +99,7 @@ setdesired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, 
 function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     desired = Parameter(identity, task.desired, qpmodel)
     v̇joint = v̇[velocity_range(state, task.joint)]
-    @expression desired - v̇joint
+    @expression v̇joint - desired
 end
 
 
@@ -145,8 +145,8 @@ function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇:
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
     desired = Parameter{Wrench{Float64}}(() -> task.desired[], qpmodel)
     @expression [
-        angular(desired) - (angular(A) * v̇ + angular(Ȧv));
-        linear(desired) - (linear(A) * v̇ + linear(Ȧv))]
+        angular(A) * v̇ + angular(Ȧv) - angular(desired);
+        linear(A) * v̇ + linear(Ȧv) - linear(desired)]
 end
 
 
@@ -172,5 +172,5 @@ end
 function task_error(task::LinearMomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
     desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
-    @expression desired - (angular(A) * v̇ + angular(Ȧv))
+    @expression linear(A) * v̇ + linear(Ȧv) - desired
 end

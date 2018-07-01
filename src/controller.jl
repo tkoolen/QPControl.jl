@@ -32,6 +32,18 @@ Base.show(io::IO, controller::MomentumBasedController{N, O, S}) where {N, O, S} 
 
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
+struct QPSolveFailure <: Exception
+    terminationstatus
+    primalstatus
+    dualstatus
+end
+
+Base.showerror(io::IO, err::QPSolveFailure) = print(io, """
+    QP solve unsuccessful.
+    Termination status: $(err.terminationstatus)
+    Primal status: $(err.primalstatus)
+    Dual status: $(err.dualstatus)""")
+
 function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
     if !controller.initialized
         initialize!(controller)
@@ -47,8 +59,14 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
 
     copyto!(state, x)
     solve!(qpmodel)
-    terminationstatus(qpmodel) == MOI.Success || error("termination status != MOI.Success")
-    primalstatus(qpmodel) == MOI.FeasiblePoint || error("primal status != MOI.FeasiblePoint")
+
+    ok = terminationstatus(qpmodel) == MOI.Success && primalstatus(qpmodel) == MOI.FeasiblePoint
+    if !ok
+        okish = terminationstatus(qpmodel) == MOI.AlmostSuccess && primalstatus(qpmodel) == MOI.UnknownResultStatus
+        if !okish
+            throw(QPSolveFailure(terminationstatus(qpmodel), primalstatus(qpmodel), dualstatus(qpmodel)))
+        end
+    end
 
     result.v̇ .= value.(qpmodel, controller.v̇)
     empty!(contactwrenches)
@@ -61,6 +79,7 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     end
 
     inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, contactwrenches)
+    # TODO: completely zero torques corresponding to floating joints
     τ
 end
 
@@ -94,10 +113,8 @@ function add_task_error_slack_variables!(controller::MomentumBasedController, ta
 end
 
 function regularize!(controller::MomentumBasedController, joint::Joint, weight)
-    task = JointAccelerationTask(joint)
-    setdesired!(task, zeros(num_velocities(joint)))
-    addtask!(controller, task, weight)
-    task
+    v̇joint = controller.v̇[velocity_range(controller.state, joint)]
+    controller.objective = @expression controller.objective + weight * (v̇joint ⋅ v̇joint)
 end
 
 function addcontact!(
@@ -141,9 +158,9 @@ function add_wrench_balance_constraint!(controller::MomentumBasedController{N}) 
     torque = @expression angular(Wg)
     force = @expression linear(Wg)
     for contactvec in values(controller.contacts)
-        for contacts in contactvec
-            torque = @expression torque + angular(contacts.wrench_world)
-            force = @expression force + linear(contacts.wrench_world)
+        for contact in contactvec
+            torque = @expression torque + angular(contact.wrench_world)
+            force = @expression force + linear(contact.wrench_world)
         end
     end
 
