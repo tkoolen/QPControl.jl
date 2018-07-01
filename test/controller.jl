@@ -67,13 +67,13 @@ end
             baseaccel = relative_acceleration(accels, val.pelvis, root_body(mechanism))
             baseaccel = transform(state, baseaccel, frame_after(floatingjoint))
             angularaccel = FreeVector3D(baseaccel.frame, baseaccel.angular)
-            @test isapprox(angularaccel, FreeVector3D(frame_after(floatingjoint), zeros(SVector{3})), atol = 1e-6)
+            @test isapprox(angularaccel, FreeVector3D(frame_after(floatingjoint), zeros(SVector{3})), atol = 1e-4)
             linearaccel = FreeVector3D(baseaccel.frame, baseaccel.linear)
             linearaccel = transform_to_root(state, linearaccel.frame) * linearaccel
-            @test isapprox(linearaccel, mechanism.gravitational_acceleration; atol = 1e-6)
+            @test isapprox(linearaccel, mechanism.gravitational_acceleration; atol = 1e-4)
         else
             v̇joint = controller.result.v̇[velocity_range(state, joint)]
-            @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-6)
+            @test isapprox(v̇joint, zeros(num_velocities(joint)); atol = 1e-4)
         end
     end
     allocs = @allocated controller(τ, 0., state)
