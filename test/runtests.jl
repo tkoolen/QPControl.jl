@@ -2,7 +2,6 @@ module MomentumBasedControlTests
 
 using MomentumBasedControl
 using RigidBodyDynamics
-using RigidBodyDynamics.OdeIntegrators
 using ValkyrieRobot.BipedControlUtil
 using ValkyrieRobot
 using StaticArrays

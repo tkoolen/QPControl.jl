@@ -17,13 +17,17 @@ export
     LinearMomentumRateTask,
     setdesired!
 
-# Controller
+# Low level
 export
     MomentumBasedController,
     addtask!,
     addcontact!,
     regularize!,
     centroidal_frame
+
+# High level
+export
+    StandingController
 
 using Compat
 using RigidBodyDynamics
@@ -33,13 +37,17 @@ using RigidBodyDynamics.PDControl
 using SimpleQP
 using StaticArrays
 using Rotations
+using Nullables
 
 import MathOptInterface
 
 const MOI = MathOptInterface
+const RBD = RigidBodyDynamics
 
 include("contacts.jl")
 include("tasks.jl")
-include("controller.jl")
+include("exceptions.jl")
+include("lowlevel/momentum.jl")
+include("highlevel/standing.jl")
 
 end # module

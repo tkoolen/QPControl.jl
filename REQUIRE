@@ -1,4 +1,5 @@
 julia 0.6
 RigidBodyDynamics 0.6.0
 MathOptInterface
+Nullables
 # SimpleQP

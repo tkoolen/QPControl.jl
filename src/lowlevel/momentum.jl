@@ -1,6 +1,7 @@
 mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
     state::S
     result::DynamicsResult{Float64, Float64}
+    floatingjoint::Nullable{Joint{Float64, QuaternionFloating{Float64}}}
     centroidalframe::CartesianFrame3D
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     contacts::Dict{RigidBody{Float64}, Vector{ContactPoint{N}}}
@@ -13,6 +14,9 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
     function MomentumBasedController{N}(mechanism::Mechanism{Float64}, optimizer::O) where {N, O<:MOI.AbstractOptimizer}
         state = MechanismState(mechanism)
         result = DynamicsResult(mechanism)
+        rootjoints = out_joints(root_body(mechanism), mechanism)
+        isfloating = length(rootjoints) == 1 && joint_type(rootjoints[1]) isa QuaternionFloating
+        floatingjoint = isfloating ? Nullable(rootjoints[1]) : Nullable{Joint{Float64, QuaternionFloating{Float64}}}()
         worldframe = root_frame(mechanism)
         centroidalframe = CartesianFrame3D("centroidal")
         nv = num_velocities(state)
@@ -24,32 +28,23 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
         v̇ = [Variable(qpmodel) for _ = 1 : nv]
         objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
         new{N, O, typeof(state)}(
-            state, result, centroidalframe, momentum_matrix, contacts, contactwrenches, qpmodel, v̇, objective, false)
+            state, result, floatingjoint, centroidalframe, momentum_matrix, contacts, contactwrenches, qpmodel, v̇, objective, false)
     end
 end
 
-Base.show(io::IO, controller::MomentumBasedController{N, O, S}) where {N, O, S} = print(io, "MomentumBasedController{$N, $O, $S}(…)")
+Base.show(io::IO, controller::MomentumBasedController{N, O, S}) where {N, O, S} =
+    print(io, "MomentumBasedController{$N, $O, $S}(…)")
 
 centroidal_frame(controller::MomentumBasedController) = controller.centroidalframe
 
-struct QPSolveFailure <: Exception
-    terminationstatus
-    primalstatus
-    dualstatus
-end
-
-Base.showerror(io::IO, err::QPSolveFailure) = print(io, """
-    QP solve unsuccessful.
-    Termination status: $(err.terminationstatus)
-    Primal status: $(err.primalstatus)
-    Dual status: $(err.dualstatus)""")
-
 function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
+    # initialize on first solve
     if !controller.initialized
         initialize!(controller)
         controller.initialized = true
     end
 
+    # unpack
     qpmodel = controller.qpmodel
     state = controller.state
     result = controller.result
@@ -57,17 +52,12 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     contactwrenches = controller.contactwrenches
     worldframe = root_frame(state.mechanism)
 
+    # set up and solve qp
     copyto!(state, x)
     solve!(qpmodel)
+    checkstatus(qpmodel)
 
-    ok = terminationstatus(qpmodel) == MOI.Success && primalstatus(qpmodel) == MOI.FeasiblePoint
-    if !ok
-        okish = terminationstatus(qpmodel) == MOI.AlmostSuccess && primalstatus(qpmodel) == MOI.UnknownResultStatus
-        if !okish
-            throw(QPSolveFailure(terminationstatus(qpmodel), primalstatus(qpmodel), dualstatus(qpmodel)))
-        end
-    end
-
+    # extract joint accelerations and contact wrenches
     result.v̇ .= value.(qpmodel, controller.v̇)
     empty!(contactwrenches)
     for body in keys(controller.contacts)
@@ -78,9 +68,31 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
         contactwrenches[BodyID(body)] = contactwrench
     end
 
+    # compute torques
     inverse_dynamics!(τ, result.jointwrenches, result.accelerations, state, result.v̇, contactwrenches)
-    # TODO: completely zero torques corresponding to floating joints
+
+    # make floating joint torques precisely zero (they are approximately zero already)
+    zero_floating_joint_torques!(τ, state, controller.floatingjoint)
+
     τ
+end
+
+function checkstatus(qpmodel::SimpleQP.Model)
+    ok = terminationstatus(qpmodel) == MOI.Success && primalstatus(qpmodel) == MOI.FeasiblePoint
+    if !ok
+        okish = terminationstatus(qpmodel) == MOI.AlmostSuccess && primalstatus(qpmodel) == MOI.UnknownResultStatus
+        if !okish
+            throw(QPSolveFailure(terminationstatus(qpmodel), primalstatus(qpmodel), dualstatus(qpmodel)))
+        end
+    end
+end
+
+function zero_floating_joint_torques!(τ::AbstractVector, state::MechanismState, floatingjoint::Nullable)
+    if !isnull(floatingjoint)
+        for i in velocity_range(state, get(floatingjoint))
+            τ[i] = 0
+        end
+    end
 end
 
 function addtask!(controller::MomentumBasedController, task::AbstractMotionTask)
@@ -135,7 +147,7 @@ end
 @noinline function initialize!(controller::MomentumBasedController)
     setobjective!(controller)
     mechanism = controller.state.mechanism
-    if any(isfloating, out_joints(root_body(mechanism), mechanism))
+    if !isnull(controller.floatingjoint)
         add_wrench_balance_constraint!(controller)
     end
 end
@@ -145,7 +157,6 @@ function setobjective!(controller::MomentumBasedController)
 end
 
 function add_wrench_balance_constraint!(controller::MomentumBasedController{N}) where N
-    # TODO: repeated computation of A if there's a MomentumRateTask
     qpmodel = controller.qpmodel
     state = controller.state
     mechanism = state.mechanism
