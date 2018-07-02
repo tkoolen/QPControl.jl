@@ -17,13 +17,17 @@ export
     LinearMomentumRateTask,
     setdesired!
 
-# Controller
+# Low level
 export
     MomentumBasedController,
     addtask!,
     addcontact!,
     regularize!,
     centroidal_frame
+
+# High level
+export
+    StandingController
 
 using Compat
 using RigidBodyDynamics
@@ -43,6 +47,7 @@ const RBD = RigidBodyDynamics
 include("contacts.jl")
 include("tasks.jl")
 include("exceptions.jl")
-include("controller.jl")
+include("lowlevel/momentum.jl")
+include("highlevel/standing.jl")
 
 end # module
