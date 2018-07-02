@@ -33,13 +33,16 @@ using RigidBodyDynamics.PDControl
 using SimpleQP
 using StaticArrays
 using Rotations
+using Nullables
 
 import MathOptInterface
 
 const MOI = MathOptInterface
+const RBD = RigidBodyDynamics
 
 include("contacts.jl")
 include("tasks.jl")
+include("exceptions.jl")
 include("controller.jl")
 
 end # module

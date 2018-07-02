@@ -58,7 +58,7 @@ mutable struct ContactPoint{N}
                 transform_to_root(state, localtransform.to) * localtransform
             end
         end
-        hat = RigidBodyDynamics.Spatial.hat
+        hat = RBD.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
         @constraint(model, ρ >= zeros(N))
         @constraint(model, ρ <= maxρ)

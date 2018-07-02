@@ -1,5 +1,5 @@
 @testset "JointAccelerationTask" begin
-    mechanism = RigidBodyDynamics.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
+    mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand!(state)
     nv = num_velocities(mechanism)
@@ -21,7 +21,7 @@
 end
 
 @testset "SpatialAccelerationTask" begin
-    mechanism = RigidBodyDynamics.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
+    mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
@@ -30,7 +30,7 @@ end
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
         body = rand(setdiff(bodies(mechanism), [base]))
-        p = RigidBodyDynamics.path(mechanism, base, body)
+        p = RBD.path(mechanism, base, body)
         task = SpatialAccelerationTask(mechanism, p)
         err = MBC.task_error(task, qpmodel, state, v̇)
 
@@ -64,7 +64,7 @@ end
 end
 
 @testset "MomentumRateTask" begin
-    mechanism = RigidBodyDynamics.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
+    mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
