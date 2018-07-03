@@ -13,7 +13,7 @@
         setdesired!(task, rand())
     end
     for (joint, task) in tasks
-        err = MBC.task_error(task, qpmodel, state, v̇)
+        err = QPC.task_error(task, qpmodel, state, v̇)
         @test map(f -> f(Dict(zip(v̇, v̇vals))), err()) == v̇vals[joint] .- task.desired
         allocs = @allocated err()
         @test allocs == 0
@@ -32,19 +32,19 @@ end
         body = rand(setdiff(bodies(mechanism), [base]))
         p = RBD.path(mechanism, base, body)
         task = SpatialAccelerationTask(mechanism, p)
-        err = MBC.task_error(task, qpmodel, state, v̇)
+        err = QPC.task_error(task, qpmodel, state, v̇)
 
         bodyframe = default_frame(body)
         baseframe = default_frame(base)
         desired = SpatialAcceleration(bodyframe, baseframe, bodyframe, SVector(1., 2., 3.), SVector(4., 5., 6.))
-        MBC.setdesired!(task, desired)
+        QPC.setdesired!(task, desired)
 
         zero_velocity!(state)
         v̇0 = zeros(length(v̇))
         setdirty!(qpmodel)
         @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(desired)
 
-        MBC.setdesired!(task, zero(desired))
+        QPC.setdesired!(task, zero(desired))
         setdirty!(qpmodel)
         @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == zeros(6)
         rand_velocity!(state)
@@ -73,17 +73,17 @@ end
 
     centroidalframe = CartesianFrame3D("centroidal")
     task = MomentumRateTask(mechanism, centroidalframe)
-    err = MBC.task_error(task, qpmodel, state, v̇)
+    err = QPC.task_error(task, qpmodel, state, v̇)
 
     angular, linear = SVector(1., 2., 3.), SVector(4., 5., 6.)
     desired = Wrench(centroidalframe, angular, linear)
-    MBC.setdesired!(task, desired)
+    QPC.setdesired!(task, desired)
     zero_velocity!(state)
     setdirty!(qpmodel)
     v̇0 = zeros(length(v̇))
     @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(desired)
 
-    MBC.setdesired!(task, zero(desired))
+    QPC.setdesired!(task, zero(desired))
     rand_velocity!(state)
     setdirty!(qpmodel)
     world_to_centroidal = Transform3D(root_frame(mechanism), centroidalframe, -center_of_mass(state).v)

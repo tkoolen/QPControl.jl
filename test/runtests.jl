@@ -1,6 +1,6 @@
 module MomentumBasedControlTests
 
-using MomentumBasedControl
+using QPControl
 using RigidBodyDynamics
 using ValkyrieRobot.BipedControlUtil
 using ValkyrieRobot
@@ -13,7 +13,7 @@ using SimpleQP
 
 import SimpleQP: MockModel, setdirty!
 
-const MBC = MomentumBasedControl
+const QPC = QPControl
 const RBD = RigidBodyDynamics
 const MOI = MathOptInterface
 
