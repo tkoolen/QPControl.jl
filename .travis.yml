@@ -5,7 +5,10 @@ os:
   # - osx
 julia:
   - 0.6
-  # - nightly
+  - nightly
+matrix:
+   allow_failures:
+    - julia: nightly
 branches:
   only:
     - master
@@ -17,8 +20,6 @@ addons:
     packages:
     - libzmq3
 before_script:
-  - julia -e 'Pkg.add("Rotations"); Pkg.checkout("Rotations", "tk/fix-perp-allocs")'
-  - julia -e 'Pkg.add("OSQP"); Pkg.checkout("OSQP")'
   - julia -e 'Pkg.clone("https://github.com/tkoolen/SimpleQP.jl")'
   - julia -e 'Pkg.add("RigidBodyDynamics"); Pkg.checkout("RigidBodyDynamics.jl")'
 # script:
