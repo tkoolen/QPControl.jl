@@ -1,6 +1,6 @@
 __precompile__()
 
-module MomentumBasedControl
+module QPControl
 
 # Contact-related
 export
