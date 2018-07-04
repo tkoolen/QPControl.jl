@@ -50,6 +50,7 @@ include("contacts.jl")
 include("tasks.jl")
 include("exceptions.jl")
 include("lowlevel/momentum.jl")
+include("lowlevel/mpc.jl")
 include("highlevel/standing.jl")
 
 end # module
