@@ -137,7 +137,6 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
     τ_ext = SimpleQP.LazyExpression(identity, zeros(AffineFunction{Float64}, num_velocities(state)))
 
     for (body, contact_points) in stage.contacts
-        path_to_root = path(state.mechanism, body, root_body(state.mechanism))
         path_to_body = path(state.mechanism, root_body(state.mechanism), body)
         for (contact_point, surface) in contact_points
             point_in_world = let state = state, point = contact_point
@@ -179,9 +178,9 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
             @constraint(model, [separation] >= [lb])  # TODO: make scalar
             @constraint(model, [separation] <= [ub])
 
-            J = let state = state, path_to_root = path_to_root
-                Parameter(geometric_jacobian(state, path_to_root), model) do J
-                    geometric_jacobian!(J, state, path_to_root)
+            J = let state = state, path_to_body = path_to_body
+                Parameter(geometric_jacobian(state, path_to_body), model) do J
+                    geometric_jacobian!(J, state, path_to_body)
                 end
             end
             τ_ext = @expression τ_ext + adjoint(angular(J)) * angular(contact_point.wrench_world) + adjoint(linear(J)) * linear(contact_point.wrench_world)
