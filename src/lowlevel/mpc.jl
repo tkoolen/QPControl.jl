@@ -184,6 +184,14 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
                 end
             end
             τ_ext = @expression τ_ext + adjoint(angular(J)) * angular(contact_point.wrench_world) + adjoint(linear(J)) * linear(contact_point.wrench_world)
+
+            v_bounds = let point = contact_point
+                Parameter(model) do
+                    isenabled(point) ? SVector(1e-2, 1e-2, 1e9) : SVector(1e9, 1e9, 1e9)
+                end
+            end
+            @constraint(model, J_point * vnext <= v_bounds)
+            @constraint(model, J_point * vnext >= -1 * v_bounds)
         end
     end
 
@@ -202,7 +210,7 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
         q_current = controller.stages[stage_index - 1].configuration
         v_current = controller.stages[stage_index - 1].velocity
     end
-    @constraint(model, H * (vnext - v_current) == Δt * (u - c - τ_ext))
+    @constraint(model, H * (vnext - v_current) == Δt * (u - c + τ_ext))
     q̇ = @expression(J_qv * vnext)
     @constraint(model, qnext - q_current == Δt * q̇)
 
@@ -211,10 +219,12 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
         objectiveterm(model,
                       controller.running_state_cost,
                       vcat(qnext, vnext)))
+    v̇ = [Variable(model) for _ in 1:length(vnext)]
+    @constraint(model, v̇ == (1 / Δt) * (vnext - v_current))
     objective = @expression(objective +
         objectiveterm(model,
                       controller.running_input_cost,
-                      u))
+                      v̇))
     controller.objective = objective
 end
 
