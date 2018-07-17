@@ -30,6 +30,8 @@ export
     StandingController
 
 using Compat
+using Compat.Random
+using Compat.LinearAlgebra
 using RigidBodyDynamics
 using RigidBodyDynamics.Graphs
 using RigidBodyDynamics.Contact

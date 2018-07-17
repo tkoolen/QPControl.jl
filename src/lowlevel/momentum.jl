@@ -58,7 +58,9 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     checkstatus(qpmodel)
 
     # extract joint accelerations and contact wrenches
-    result.v̇ .= value.(qpmodel, controller.v̇)
+    @inbounds for i in eachindex(result.v̇)
+        result.v̇[i] = value(qpmodel, controller.v̇[i])
+    end
     empty!(contactwrenches)
     for body in keys(controller.contacts)
         contactwrench = zero(Wrench{Float64}, worldframe)

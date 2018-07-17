@@ -44,6 +44,7 @@ end
 @testset "zero velocity free fall" begin
     val = Valkyrie()
     mechanism = val.mechanism
+    remove_fixed_tree_joints!(mechanism)
     floatingjoint = val.basejoint
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
@@ -85,6 +86,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
 @testset "achievable momentum rate" begin
     val = Valkyrie()
     mechanism = val.mechanism
+    remove_fixed_tree_joints!(mechanism)
     floatingjoint = val.basejoint
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
@@ -100,7 +102,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     end
 
     srand(1)
-    for p in linspace(0., 1., 5)
+    for p in Compat.range(0., stop=1., length=5)
         rand!(state)
         com = center_of_mass(state)
         centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
@@ -149,6 +151,7 @@ end
 @testset "spatial acceleration, constrained = $constrained" for constrained in [true, false]
     val = Valkyrie()
     mechanism = val.mechanism
+    remove_fixed_tree_joints!(mechanism)
     floatingjoint = val.basejoint
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
@@ -166,7 +169,7 @@ end
     accels = result.accelerations
     if constrained
         addtask!(controller, task)
-        regularize!.(controller, tree_joints(mechanism), 1.0)
+        regularize!.(Ref(controller), tree_joints(mechanism), 1.0)
     else
         addtask!(controller, task, 1.0)
     end
