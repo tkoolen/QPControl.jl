@@ -21,7 +21,6 @@ addons:
     - libzmq3
 before_script:
   - julia -e 'Pkg.clone("https://github.com/tkoolen/SimpleQP.jl")'
-  - julia -e 'Pkg.add("RigidBodyDynamics"); Pkg.checkout("RigidBodyDynamics.jl")'
 # script:
 #  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 #  - julia -e 'Pkg.clone(pwd()); Pkg.build("QPControl"); Pkg.test("QPControl"; coverage=true)'

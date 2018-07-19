@@ -1,12 +1,15 @@
 module MomentumBasedControlTests
 
+using Compat
+using Compat.Test
+using Compat.Random
+using Compat.LinearAlgebra
 using QPControl
 using RigidBodyDynamics
 using ValkyrieRobot.BipedControlUtil
 using ValkyrieRobot
 using StaticArrays
 using Rotations
-using Compat.Test
 using MathOptInterface
 using OSQP.MathOptInterfaceOSQP
 using SimpleQP
