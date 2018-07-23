@@ -5,9 +5,10 @@ struct QuadraticCost{T}
     Q::Matrix{T}
     q::Vector{T}
     x0::Vector{T}
+    constant::Base.RefValue{T}
 end
 
-QuadraticCost{T}(n::Integer) where {T} = QuadraticCost(zeros(T, n, n), zeros(T, n), zeros(T, n))
+QuadraticCost{T}(n::Integer) where {T} = QuadraticCost(zeros(T, n, n), zeros(T, n), zeros(T, n), Ref(zero(T)))
 
 all_effort_bounds(m::Mechanism) =
     collect(Base.Iterators.flatten(map(effort_bounds, joints(m))))
@@ -185,13 +186,24 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
             end
             τ_ext = @expression τ_ext + adjoint(angular(J)) * angular(contact_point.wrench_world) + adjoint(linear(J)) * linear(contact_point.wrench_world)
 
-            v_bounds = let point = contact_point
-                Parameter(model) do
-                    isenabled(point) ? SVector(1e-2, 1e-2, 1e9) : SVector(1e9, 1e9, 1e9)
-                end
-            end
-            @constraint(model, J_point * vnext <= v_bounds)
-            @constraint(model, J_point * vnext >= -1 * v_bounds)
+            # objective = controller.objective
+            # v_penalty = let point = contact_point
+            #     Parameter(model) do
+            #         isenabled(point) ? 100.0 : 0.0
+            #     end
+            # end
+            # point_vnext = @expression J_point * vnext
+            # controller.objective = @expression(objective + v_penalty * dot(point_vnext, point_vnext))
+
+            # v_bounds = let point = contact_point
+            #     Parameter(model) do
+            #         isenabled(point) ? 0.9 : 1e9
+            #         # isenabled(point) ? SVector(1e-2, 1e-2, 1e9) : SVector(1e9, 1e9, 1e9)
+            #     end
+            # end
+            # @constraint(model, J_point * vnext <= v_bounds * (J_point * v_current))
+            # @constraint(model, J_point * vnext <= v_bounds)
+            # @constraint(model, J_point * vnext >= -1 * v_bounds)
         end
     end
 
@@ -214,6 +226,9 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
     q̇ = @expression(J_qv * vnext)
     @constraint(model, qnext - q_current == Δt * q̇)
 
+    # @show qnext[2] q_current()[2]
+    # @constraint(model, [qnext[2]] >= [0.80])
+
     objective = controller.objective
     objective = @expression(objective +
         objectiveterm(model,
@@ -225,6 +240,7 @@ function initialize_stage!(controller::MPCController, stage_index::Integer)
         objectiveterm(model,
                       controller.running_input_cost,
                       v̇))
+    objective = @expression(objective + 1e-9 * dot(u, u))
     controller.objective = objective
 end
 
@@ -245,6 +261,10 @@ function initialize!(controller::MPCController)
         objectiveterm(model, terminal_state_cost, xfinal))
 
     controller.objective = objective
+
+    # vars = [Variable(i) for i in 1:length(model.user_var_to_optimizer)]
+    # controller.objective = @expression(objective + (1e-9 * dot(vars, vars)))
+
     setobjective!(controller)
     controller.initialized = true
 end
@@ -263,9 +283,12 @@ function objectiveterm(model, cost::QuadraticCost, x)
     q = let cost = cost
         Parameter(() -> cost.q, model)
     end
+    constant = let cost = cost
+        Parameter(() -> cost.constant[], model)
+    end
     x̄ = [Variable(model) for _ in 1:length(cost.x0)]
     @constraint(model, x̄ == x - x0)
-    @expression(x̄' * Q * x̄ + dot(q, x̄))
+    @expression(x̄' * Q * x̄ + dot(q, x̄) + constant)
 end
 
 function (controller::MPCController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
@@ -280,6 +303,7 @@ function (controller::MPCController)(τ::AbstractVector, t::Number, x::Union{<:V
     end
     solve!(controller.qpmodel)
     τ .= SimpleQP.value.(controller.qpmodel, first(stages(controller)).input)
+    # @show τ
 end
 
 function addcontact!(
