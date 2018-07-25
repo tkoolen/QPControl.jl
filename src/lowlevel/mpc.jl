@@ -1,324 +1,231 @@
 using RigidBodyDynamics: lower, upper, velocity_to_configuration_derivative_jacobian, velocity_to_configuration_derivative_jacobian!
 using Compat: adjoint
 
-struct QuadraticCost{T}
-    Q::Matrix{T}
-    q::Vector{T}
-    x0::Vector{T}
-    constant::Base.RefValue{T}
-end
-
-QuadraticCost{T}(n::Integer) where {T} = QuadraticCost(zeros(T, n, n), zeros(T, n), zeros(T, n), Ref(zero(T)))
-
-all_effort_bounds(m::Mechanism) =
-    collect(Base.Iterators.flatten(map(effort_bounds, joints(m))))
-
-struct MPCStage{N, O<:MOI.AbstractOptimizer, S<:MechanismState}
-    qpmodel::SimpleQP.Model{Float64, O}
-    state::S
-    result::DynamicsResult{Float64, Float64}
+struct MPCStage{C}
     Δt::Float64
-    configuration::Vector{Variable}
-    velocity::Vector{Variable}
-    input::Vector{Variable}
-    contacts::Dict{RigidBody{Float64},
-                   Vector{Pair{ContactPoint{N},
-                               HalfSpace3D{Float64}}}}
+    q::Vector{Variable}
+    v::Vector{Variable}
+    v̇::Vector{Variable}
+    u::Vector{Variable}
+    contacts::Vector{C}
+    initialized::typeof(Ref(false))
 end
 
-
-mutable struct MPCController{N, O<:MOI.AbstractOptimizer, M<:Mechanism, S<:MechanismState}
+struct MPCController{C, O <: MOI.AbstractOptimizer, M <: Mechanism, S <: MechanismState}
     mechanism::M
+    state::S
+    dynamicsresult::DynamicsResult{Float64, Float64}
     qpmodel::SimpleQP.Model{Float64, O}
-    stages::Vector{MPCStage{N, O, S}}
-    running_state_cost::QuadraticCost{Float64}
-    running_input_cost::QuadraticCost{Float64}
-    terminal_state_cost::QuadraticCost{Float64}
-    objective::SimpleQP.LazyExpression
-    initialized::Bool
+    stages::Vector{MPCStage{C}}
+    initialized::typeof(Ref(false))
 
-    function MPCController{N}(mechanism::Mechanism{Float64}, optimizer::O) where {N, O<:MOI.AbstractOptimizer}
-        model = SimpleQP.Model(optimizer)
-        M = typeof(mechanism)
-        S = typeof(MechanismState(mechanism))
-        stages = Vector{MPCStage{N, O, S}}()
-        nq = num_positions(mechanism)
-        nv = num_velocities(mechanism)
-        running_state_cost = QuadraticCost{Float64}(nq + nv)
-        running_input_cost = QuadraticCost{Float64}(nv)
-        terminal_state_cost = QuadraticCost{Float64}(nq + nv)
-        objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
-
-        new{N, O, M, S}(
-            mechanism,
-            model,
-            stages,
-            running_state_cost,
-            running_input_cost,
-            terminal_state_cost,
-            objective,
-            false
-            )
+    function MPCController{C}(mechanism::Mechanism, optimizer::O) where {C, O <: MOI.AbstractOptimizer}
+        state = MechanismState(mechanism)
+        dynamicsresult = DynamicsResult(mechanism)
+        qpmodel = SimpleQP.Model(optimizer)
+        stages = Vector{MPCStage{C}}()
+        initialized = Ref(false)
+        new{C, O, typeof(mechanism), typeof(state)}(mechanism, state, dynamicsresult, qpmodel, stages, initialized)
     end
 end
 
 horizon(c::MPCController) = length(c.stages)
 stages(c::MPCController) = c.stages
 
-function addstage!(controller::MPCController{N, O, M, S}, Δt::Real = 0.001) where {N, O, M, S}
-    @assert !controller.initialized
+# Needed to work around problems with infinite bounds in OSQP
+const NEARLY_INFINITE = 1e9
+make_finite(x::Real) = isfinite(x) ? x : NEARLY_INFINITE * sign(x)
+
+function addstage!(controller::MPCController{C}, Δt::Real) where {C}
+    @assert !controller.initialized[]
     model = controller.qpmodel
     mechanism = controller.mechanism
-    state::S = MechanismState(mechanism)
+    state = controller.state
 
-    qnext = [Variable(model) for _ in 1:num_positions(state)]
-    vnext = [Variable(model) for _ in 1:num_velocities(state)]
+    q = [Variable(model) for _ in 1:num_positions(state)]
+    v = [Variable(model) for _ in 1:num_velocities(state)]
+    v̇ = [Variable(model) for _ in 1:num_velocities(state)]
     u = [Variable(model) for _ in 1:num_velocities(state)]
-    @constraint model u >= lower.(all_effort_bounds(mechanism))
-    @constraint model u <= upper.(all_effort_bounds(mechanism))
 
-    contacts = Dict{RigidBody{Float64}, Vector{Pair{ContactPoint{N}, HalfSpace3D{Float64}}}}()
-    result = DynamicsResult(mechanism)
-    stage = MPCStage{N, O, S}(
-        controller.qpmodel, state, result, Δt,
-        qnext, vnext, u, contacts)
+    u_limits = effort_bounds.(tree_joints(mechanism))
+    u_lb = make_finite.(lower.(vcat(u_limits...)))
+    u_ub = make_finite.(upper.(vcat(u_limits...)))
+    @constraint model u >= u_lb
+    @constraint model u <= u_ub
+
+    contacts = Vector{C}()
+    initialized = Ref(false)
+    stage = MPCStage{C}(Δt, q, v, v̇, u, contacts, initialized)
     push!(controller.stages, stage)
     stage
 end
 
-function addstages!(c::MPCController, num_stages::Integer, Δt::Real = 0.001)
-    for _ in 1:num_stages
+function addstages!(c::MPCController, num_stages::Integer, Δt::Real)
+    map(1:num_stages) do _
         addstage!(c, Δt)
     end
 end
 
-function addcontact!(
-        stage::MPCStage{N, O, S},
-        body::RigidBody{Float64},
-        position::Point3D,
-        normal::FreeVector3D,
-        μ::Float64,
-        surface::HalfSpace3D,
-        ) where {N, O, S}
-    contact_point = ContactPoint{N}(position, normal,
-                                    μ, stage.state,
-                                    stage.qpmodel)
-    push!(get!(Vector{Pair{ContactPoint{N}, HalfSpace3D{Float64}}}, stage.contacts, body), (contact_point => surface))
-    # TODO: add objective term
-    contact_point
+function position end
+function wrench_world end
+
+
+function addcontact!(stage::MPCStage{C}, contact::C) where C
+    @assert !stage.initialized[]
+    push!(stage.contacts, contact)
+    contact
 end
 
-function initialize_stage!(controller::MPCController, stage_index::Integer)
-    stage = stages(controller)[stage_index]
+function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Point3D, normal::FreeVector3D, μ::Float64) where C
+    addcontact!(stage, C(position, normal, μ, controller.state, controller.qpmodel))
+end
 
-    state = stage.state
+function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Point3D, surface::HalfSpace3D, μ::Float64, max_ρ=10000) where C
+    model = controller.qpmodel
+
+    normal_in_body = let state = controller.state, surface = surface, position = position
+        Parameter(model) do
+            transform(state, surface.outward_normal, position.frame)
+        end
+    end
+
+    indicator = add_boolean_indicator!(controller, stage, position, surface)
+    contact_point = C(position, normal_in_body, μ, controller.state, controller.qpmodel)
+    @constraint(model, contact_point.ρ <= fill(max_ρ * indicator, length(contact_point.ρ)))
+
+    addcontact!(stage, contact_point)
+end
+
+function add_boolean_indicator!(controller::MPCController, stage::MPCStage, position::Point3D, surface::HalfSpace3D, separation_atol=1e-2, separation_max=100)
+    state = controller.state
     mechanism = state.mechanism
-    result = stage.result
-    model = stage.qpmodel
+    body = body_fixed_frame_to_body(mechanism, position.frame)
+    path_to_body = path(mechanism, root_body(mechanism), body)
+    model = controller.qpmodel
+
+    position_world = let state = state,  position = position
+        Parameter(model) do
+            transform(state, position, root_frame(state.mechanism))
+        end
+    end
+    J_point = let state = state, position_world = position_world, path_to_body = path_to_body
+        Parameter(point_jacobian(state, path_to_body, position_world()), model) do J
+            point_jacobian!(J, state, path_to_body, position_world())
+        end
+    end
+    linearized_position_world = @expression position_world.v + stage.Δt * (J_point.J * stage.v)
+
+    surface_world = let surface = surface, state = state
+        Parameter(model) do
+            HalfSpace3D(
+                transform(state, surface.point, root_frame(state.mechanism)),
+                transform(state, surface.outward_normal, root_frame(state.mechanism)))
+        end
+    end
+    separation = @expression(dot(surface_world.outward_normal.v, linearized_position_world) -
+                             dot(surface_world.outward_normal.v, surface_world.point.v))
+
+    indicator = Variable(model)
+    @constraint(model, indicator ∈ {0, 1})
+    @constraint(model, [separation] >= [-separation_atol])
+    @constraint(model, [separation] <= [separation_atol + separation_max * (1 - indicator)])
+
+    indicator
+end
+
+"""
+Holds a few useful dynamics paramters which are re-used for each stage in the MPC
+optmization.
+"""
+struct DynamicsParams{TH, Tc, TJ}
+    H::TH
+    c::Tc
+    J_qv::TJ
+end
+
+function generalized_torque(state, contact_point::ContactPoint, model::Model)
+    mechanism = state.mechanism
+    body = body_fixed_frame_to_body(mechanism, contact_point.position.frame)
+    path_to_root = path(mechanism, body, root_body(mechanism))
+    J_body_to_root = let state = state, path_to_root = path_to_root
+        Parameter(geometric_jacobian(state, path_to_root), model) do J
+            geometric_jacobian!(J, state, path_to_root)
+        end
+    end
+    @expression adjoint(angular(J_body_to_root)) * angular(contact_point.wrench_world) + adjoint(linear(J_body_to_root)) * linear(contact_point.wrench_world)
+end
+
+function initialize!(stage::MPCStage, model::Model, state::MechanismState,
+                     params::DynamicsParams, q_prev, v_prev)
+    @assert !stage.initialized[]
     Δt = stage.Δt
-    qnext = stage.configuration
-    vnext = stage.velocity
-    u = stage.input
-
-    H = let state = state
-        Parameter(mass_matrix(state), model) do H
-            mass_matrix!(H, state)
-        end
+    H = params.H
+    c = params.c
+    J_qv = params.J_qv
+    τ_ext = zeros(num_velocities(state))
+    for contact in stage.contacts
+        τ_ext = @expression τ_ext + generalized_torque(state, contact, model)
     end
-    c = let state = state, result = result
-        Parameter(result.dynamicsbias, model) do c
-            dynamics_bias!(result, state)
-        end
-    end
-    J_qv = let state = state
-        Parameter(velocity_to_configuration_derivative_jacobian(state), model) do J
-            velocity_to_configuration_derivative_jacobian!(J, state)
-        end
-    end
-    τ_ext = SimpleQP.LazyExpression(identity, zeros(AffineFunction{Float64}, num_velocities(state)))
-
-    for (body, contact_points) in stage.contacts
-        path_to_body = path(state.mechanism, root_body(state.mechanism), body)
-        for (contact_point, surface) in contact_points
-            point_in_world = let state = state, point = contact_point
-                Parameter(model) do
-                    (transform_to_root(state, point.position.frame) * point.position).v
-                end
-            end
-            J_point = let state = state,
-                          point = contact_point,
-                          path_to_body = path_to_body,
-                          J_point = point_jacobian(state, path_to_body, transform_to_root(state, point.position.frame) * point.position)
-                Parameter(J_point.J, model) do _
-                    p = transform_to_root(state, point.position.frame) * point.position
-                    point_jacobian!(J_point, state, path_to_body, p)
-                end
-            end
-            linearized_position_in_world = @expression point_in_world + Δt * (J_point * vnext)
-            surface_origin = let surface = surface, mechanism = mechanism
-                Parameter(model) do
-                    @framecheck surface.point.frame root_frame(mechanism)
-                    surface.point.v
-                end
-            end
-            surface_normal = let surface = surface, mechanism = mechanism
-                Parameter(model) do
-                    @framecheck surface.outward_normal.frame root_frame(mechanism)
-                    surface.outward_normal.v
-                end
-            end
-            separation = @expression(dot(surface_normal,
-                                         linearized_position_in_world) -
-                                     dot(surface_normal, surface_origin))
-            lb = -1e-2
-            ub = let point = contact_point
-                Parameter(model) do
-                    isenabled(point) ? 1e-2 : 1e9  # TODO: Inf?
-                end
-            end
-            @constraint(model, [separation] >= [lb])  # TODO: make scalar
-            @constraint(model, [separation] <= [ub])
-
-            J = let state = state, path_to_body = path_to_body
-                Parameter(geometric_jacobian(state, path_to_body), model) do J
-                    geometric_jacobian!(J, state, path_to_body)
-                end
-            end
-            τ_ext = @expression τ_ext + adjoint(angular(J)) * angular(contact_point.wrench_world) + adjoint(linear(J)) * linear(contact_point.wrench_world)
-
-            # objective = controller.objective
-            # v_penalty = let point = contact_point
-            #     Parameter(model) do
-            #         isenabled(point) ? 100.0 : 0.0
-            #     end
-            # end
-            # point_vnext = @expression J_point * vnext
-            # controller.objective = @expression(objective + v_penalty * dot(point_vnext, point_vnext))
-
-            # v_bounds = let point = contact_point
-            #     Parameter(model) do
-            #         isenabled(point) ? 0.9 : 1e9
-            #         # isenabled(point) ? SVector(1e-2, 1e-2, 1e9) : SVector(1e9, 1e9, 1e9)
-            #     end
-            # end
-            # @constraint(model, J_point * vnext <= v_bounds * (J_point * v_current))
-            # @constraint(model, J_point * vnext <= v_bounds)
-            # @constraint(model, J_point * vnext >= -1 * v_bounds)
-        end
-    end
-
-    if stage_index == 1
-        q_current = let state = state
-            Parameter(model) do
-                configuration(state)
-            end
-        end
-        v_current = let state = state
-            Parameter(model) do
-                velocity(state)
-            end
-        end
-    else
-        q_current = controller.stages[stage_index - 1].configuration
-        v_current = controller.stages[stage_index - 1].velocity
-    end
-    @constraint(model, H * (vnext - v_current) == Δt * (u - c + τ_ext))
-    q̇ = @expression(J_qv * vnext)
-    @constraint(model, qnext - q_current == Δt * q̇)
-
-    # @show qnext[2] q_current()[2]
-    # @constraint(model, [qnext[2]] >= [0.80])
-
-    objective = controller.objective
-    objective = @expression(objective +
-        objectiveterm(model,
-                      controller.running_state_cost,
-                      vcat(qnext, vnext)))
-    v̇ = [Variable(model) for _ in 1:length(vnext)]
-    @constraint(model, v̇ == (1 / Δt) * (vnext - v_current))
-    objective = @expression(objective +
-        objectiveterm(model,
-                      controller.running_input_cost,
-                      v̇))
-    objective = @expression(objective + 1e-9 * dot(u, u))
-    controller.objective = objective
+    @show τ_ext
+    @constraint(model, H * (stage.v - v_prev) == Δt * (stage.u - c - τ_ext))
+    q̇ = @expression(J_qv * stage.v)
+    @constraint(model, q̇ == (1 / Δt) * (stage.q - q_prev))
+    @constraint(model, stage.v̇ == (1 / Δt) * (stage.v - v_prev))
+    stage.initialized[] = true
 end
 
 
 function initialize!(controller::MPCController)
-    @assert !controller.initialized
+    @assert !controller.initialized[]
     model = controller.qpmodel
-    terminal_state_cost = controller.terminal_state_cost
+    # terminal_state_cost = controller.terminal_state_cost
+
+    H = let state = controller.state
+        Parameter(mass_matrix(state), model) do H
+            mass_matrix!(H, state)
+        end
+    end
+    c = let state = controller.state, result = controller.dynamicsresult
+        Parameter(result.dynamicsbias, model) do c
+            dynamics_bias!(result, state)
+        end
+    end
+    J_qv = let state = controller.state
+        Parameter(velocity_to_configuration_derivative_jacobian(state), model) do J
+            velocity_to_configuration_derivative_jacobian!(J, state)
+        end
+    end
+    dynamics_params = DynamicsParams(H, c, J_qv)
 
     for i in eachindex(controller.stages)
-        initialize_stage!(controller, i)
+        if i == 1
+            q_prev = let state = controller.state
+                Parameter(() -> configuration(state), model)
+            end
+            v_prev = let state = controller.state
+                Parameter(() -> velocity(state), model)
+            end
+        else
+            q_prev = controller.stages[i - 1].q
+            v_prev = controller.stages[i - 1].v
+        end
+        stage = controller.stages[i]
+        initialize!(stage, controller.qpmodel, controller.state, dynamics_params, q_prev, v_prev)
     end
-
-    objective = controller.objective
-    xfinal = vcat(controller.stages[end].configuration,
-                  controller.stages[end].velocity)
-    objective = @expression(objective +
-        objectiveterm(model, terminal_state_cost, xfinal))
-
-    controller.objective = objective
-
-    # vars = [Variable(i) for i in 1:length(model.user_var_to_optimizer)]
-    # controller.objective = @expression(objective + (1e-9 * dot(vars, vars)))
-
-    setobjective!(controller)
-    controller.initialized = true
-end
-
-function setobjective!(controller::MPCController)
-    @objective(controller.qpmodel, Minimize, controller.objective)
-end
-
-function objectiveterm(model, cost::QuadraticCost, x)
-    x0 = let cost = cost
-        Parameter(() -> cost.x0, model)
-    end
-    Q = let cost = cost
-        Parameter(() -> cost.Q, model)
-    end
-    q = let cost = cost
-        Parameter(() -> cost.q, model)
-    end
-    constant = let cost = cost
-        Parameter(() -> cost.constant[], model)
-    end
-    x̄ = [Variable(model) for _ in 1:length(cost.x0)]
-    @constraint(model, x̄ == x - x0)
-    @expression(x̄' * Q * x̄ + dot(q, x̄) + constant)
+    controller.initialized[] = true
 end
 
 function (controller::MPCController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
-    if !controller.initialized
+    if !controller.initialized[]
         initialize!(controller)
     end
-    @assert controller.initialized
+    @assert controller.initialized[]
 
-    # TODO: update controller contact normals
-    for stage in stages(controller)
-        copyto!(stage.state, x)
-    end
+    copyto!(controller.state, x)
     solve!(controller.qpmodel)
-    τ .= SimpleQP.value.(controller.qpmodel, first(stages(controller)).input)
-    # @show τ
-end
-
-function addcontact!(
-        controller::MPCController{N},
-        body::RigidBody{Float64},
-        position::Point3D,
-        normal::FreeVector3D,
-        μ::Float64,
-        surface::HalfSpace3D,
-        ) where {N}
-    @assert !controller.initialized
-    contact_point = ContactPoint{N}(position, normal,
-                                    μ, controller.state,
-                                    controller.qpmodel)
-    push!(get!(Vector{Pair{ContactPoint{N}, HalfSpace3D{Float64}}}, controller.contacts, body), (contact_point => surface))
-    # TODO: add objective term
-    contact_point
+    τ .= SimpleQP.value.(controller.qpmodel, first(stages(controller)).u)
+    if any(isnan, τ)
+        @show SimpleQP.primalstatus(controller.qpmodel)
+        @show t, Vector(x), τ
+    end
 end
