@@ -89,14 +89,14 @@ function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Po
         end
     end
 
-    indicator = add_boolean_indicator!(controller, stage, position, surface)
+    indicator = add_boolean_contact_indicator!(controller, stage, position, surface)
     contact_point = C(position, normal_in_body, μ, controller.state, controller.qpmodel)
     @constraint(model, contact_point.ρ <= fill(max_ρ * indicator, length(contact_point.ρ)))
 
     addcontact!(stage, contact_point)
 end
 
-function add_boolean_indicator!(controller::MPCController, stage::MPCStage, position::Point3D, surface::HalfSpace3D, separation_atol=1e-2, separation_max=100)
+function add_boolean_contact_indicator!(controller::MPCController, stage::MPCStage, position::Point3D, surface::HalfSpace3D, separation_atol=1e-3, separation_max=100)
     state = controller.state
     mechanism = state.mechanism
     body = body_fixed_frame_to_body(mechanism, position.frame)
@@ -127,7 +127,13 @@ function add_boolean_indicator!(controller::MPCController, stage::MPCStage, posi
 
     indicator = Variable(model)
     @constraint(model, indicator ∈ {0, 1})
-    @constraint(model, [separation] >= [-separation_atol])
+
+    separation_min = @expression(
+        min((dot(surface_world.outward_normal.v, position_world.v) -
+             dot(surface_world.outward_normal.v, surface_world.point.v)),
+             -separation_atol))
+
+    @constraint(model, [separation] >= [separation_min])
     @constraint(model, [separation] <= [separation_atol + separation_max * (1 - indicator)])
 
     indicator
@@ -220,6 +226,7 @@ function (controller::MPCController)(τ::AbstractVector, t::Number, x::Union{<:V
         initialize!(controller)
     end
     @assert controller.initialized[]
+    # println("got:    ", Vector(configuration(x)), " ", Vector(velocity(x)))
 
     copyto!(controller.state, x)
     solve!(controller.qpmodel)
@@ -228,4 +235,5 @@ function (controller::MPCController)(τ::AbstractVector, t::Number, x::Union{<:V
         @show SimpleQP.primalstatus(controller.qpmodel)
         @show t, Vector(x), τ
     end
+    # println("expect: ", SimpleQP.value.(controller.qpmodel, controller.stages[1].q), " ", SimpleQP.value.(controller.qpmodel, controller.stages[1].q))
 end
