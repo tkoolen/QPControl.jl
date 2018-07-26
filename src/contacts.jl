@@ -54,7 +54,7 @@ struct ContactPoint{N}
         maxnormalforce = let ret = ret
             Parameter(() -> ret.maxnormalforce[], model)
         end
-        maxρ = @expression((maxnormalforce / (N * sqrt(μ^2 + 1))) * ones(N))
+        maxρ = @expression((maxnormalforce / (N * sqrt(μ*μ + 1))) * ones(N))  # μ*μ instead of μ^2 due to https://github.com/tkoolen/SimpleQP.jl/issues/66
         state_param = let state = state
             Parameter(() -> state, model)
         end
