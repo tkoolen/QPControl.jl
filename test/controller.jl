@@ -156,7 +156,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
 
-    set_up_valkyrie_contacts!(controller; parametric_contact_surface=false)
+    set_up_valkyrie_contacts!(controller; parametric_contact_surface=true)
     ḣtask = MomentumRateTask(mechanism, centroidal_frame(controller))
     addtask!(controller, ḣtask) #, 1.0)
 
@@ -178,8 +178,8 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
             for contact in controller.contacts[body]
                 active = rand() < p
                 if active
-                    normal = contact.normal
-                    μ = contact.μ
+                    normal = SimpleQP.evalarg(contact.normal)
+                    μ = SimpleQP.evalarg(contact.μ)
                     contact.weight[] = 1e-6
                     contact.maxnormalforce[] = MAX_NORMAL_FORCE_FIXME
                     fnormal = 50. * rand()
