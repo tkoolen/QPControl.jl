@@ -140,7 +140,9 @@ end
 
 function addcontact!(
         controller::MomentumBasedController{N}, body::RigidBody{Float64},
-        position::Point3D, normal::FreeVector3D, μ::Float64) where N
+        position::Union{Point3D, Parameter{<:Point3D}},
+        normal::Union{FreeVector3D, Parameter{<:FreeVector3D}},
+        μ::Union{Float64, Parameter{Float64}}) where N
     addcontact!(controller, body, ContactPoint{N}(position, normal, μ, controller.state, controller.qpmodel))
 end
 
