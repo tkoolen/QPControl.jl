@@ -51,9 +51,10 @@ struct ContactPoint{N}
 
         # constraints
         basis = @expression(forcebasis(μ, Val(N)))
-        maxρ = let ret = ret
-            Parameter(x -> x .= ret.maxnormalforce[] / (N * sqrt(μ^2 + 1)), zeros(N), model)
+        maxnormalforce = let ret = ret
+            Parameter(() -> ret.maxnormalforce[], model)
         end
+        maxρ = @expression((maxnormalforce / (N * sqrt(μ^2 + 1))) * ones(N))
         toroot = @expression(transform_to_root(state, position.frame) * z_up_transform(position, normal, normal_aligned_frame))
         hat = RBD.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
