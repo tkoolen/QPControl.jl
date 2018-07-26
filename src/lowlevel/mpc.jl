@@ -172,7 +172,6 @@ function initialize!(stage::MPCStage, model::Model, state::MechanismState,
     for contact in stage.contacts
         τ_ext = @expression τ_ext + generalized_torque(state, contact, model)
     end
-    @show τ_ext
     @constraint(model, H * (stage.v - v_prev) == Δt * (stage.u - c - τ_ext))
     q̇ = @expression(J_qv * stage.v)
     @constraint(model, q̇ == (1 / Δt) * (stage.q - q_prev))

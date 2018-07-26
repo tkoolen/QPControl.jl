@@ -20,12 +20,18 @@ export
     setdesired!
 
 # Low level
+# Momentum
 export
     MomentumBasedController,
     addtask!,
     addcontact!,
     regularize!,
     centroidal_frame
+# MPC
+export
+    MPCController,
+    addstage!,
+    addstages!
 
 # High level
 export
