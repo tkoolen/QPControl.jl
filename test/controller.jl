@@ -29,8 +29,6 @@
     # Constrain the contact force to be non-zero for testing
     @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
 
-    @objective(model, Minimize, 0 * dot(controller_contact.force_local.v, controller_contact.force_local.v)) # Need to have an objective to avoid throwing "unsupported objective" errors https://github.com/tkoolen/SimpleQP.jl/issues/62
-
     for θ in linspace(-π, π)
         set_configuration!(state, [θ])
         solve!(model)
