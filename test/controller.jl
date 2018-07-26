@@ -29,22 +29,20 @@
     # Constrain the contact force to be non-zero for testing
     @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
 
-    @objective(model, Minimize, 0 * dot(controller_contact.force_local.v, controller_contact.force_local.v)) # Need to have an objective to avoid throwing "unsupported objective" errors
+    @objective(model, Minimize, 0 * dot(controller_contact.force_local.v, controller_contact.force_local.v)) # Need to have an objective to avoid throwing "unsupported objective" errors https://github.com/tkoolen/SimpleQP.jl/issues/62
 
-    solve!(model)
+    for θ in linspace(-π, π)
+        set_configuration!(state, [θ])
+        solve!(model)
+        # Sanity check our constraint
+        @test value.(model, controller_contact.force_local.v) ≈ [0.0, 0.0, 1.0]
 
-    # Since the body is currently aligned to the world, the local force and linear world wrench should match:
-    @test value.(model, linear(controller_contact.wrench_world)) ≈ [0.0, 0.0, 1.0]
-    @test value.(model, controller_contact.force_local.v) ≈ [0.0, 0.0, 1.0]
-
-    # Now we rotate the robot 180 degrees, so the z axis of the body is opposite the z axis of the world
-    set_configuration!(state, [π])
-    # Re-solve the model, which should update the parameters
-    solve!(model)
-    # Now that the body z is opposite world z, the linear part of wrench_world should
-    # point in the opposite direction from the force_local
-    @test value.(model, linear(controller_contact.wrench_world)) ≈ [0.0, 0.0, -1.0]
-    @test value.(model, controller_contact.force_local.v) ≈ [0.0, 0.0, 1.0]
+        # No matter how we rotate the robot, the contact-aligned frame will still
+        # be aligned to the contact normal, which is fixed in world frame. So the
+        # linear component of the contact wrench in world frame will always be
+        # along [0, 0, 1].
+        @test value.(model, linear(controller_contact.wrench_world)) ≈ [0.0, 0.0, 1.0]
+    end
 end
 
 @testset "fixed base joint space control, constrained = $constrained" for constrained in [true, false]
@@ -156,11 +154,11 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     τ = similar(velocity(state))
 
     N = 4
-    controller = MomentumBasedController{N}(mechanism, GurobiOptimizer(OutputFlag=0))
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
 
     set_up_valkyrie_contacts!(controller; parametric_contact_surface=false)
     ḣtask = MomentumRateTask(mechanism, centroidal_frame(controller))
-    addtask!(controller, ḣtask, 1000.0)
+    addtask!(controller, ḣtask) #, 1.0)
 
     for joint in tree_joints(mechanism)
         regularize!(controller, joint, 1e-6)
@@ -188,7 +186,6 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
                     μreduced = sqrt(2) / 2 * μ # due to polyhedral inner approximation; assumes 4 basis vectors or more
                     ftangential = μreduced * fnormal * rand() * cross(normal, FreeVector3D(normal.frame, normalize(randn(SVector{3}))))
                     f = fnormal * normal + ftangential
-                    @show normal μ f
                     @assert isapprox(ftangential ⋅ normal, 0., atol = 1e-12)
                     @assert norm(f - (normal ⋅ f) * normal) ≤ μreduced * (normal ⋅ f)
                     wrench = Wrench(contact.position, f)
@@ -205,11 +202,10 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
         # Ensure that desired momentum rate is achieved.
         ḣ = Wrench(momentum_matrix(state), controller.result.v̇) + momentum_rate_bias(state)
         ḣ = transform(ḣ, world_to_centroidal)
-        @show ḣ ḣdes
         @test isapprox(ḣdes, ḣ; atol = 1e-3)
 
         allocs = @allocated controller(τ, 0., state)
-        # @test allocs == 0
+        @test allocs == 0
     end
 end
 
