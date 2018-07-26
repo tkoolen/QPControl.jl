@@ -29,9 +29,9 @@ struct ContactPoint{N}
     ρ::SVector{N, Variable} # basis vector multipliers
     force_local::FreeVector3D{SVector{3, Variable}} # contact force expressed in contact point's normal-aligned frame
     wrench_world::Wrench{Variable}
-    position::Any # not used in any methods, just here for debugging
-    normal::Any # not used in any methods, just here for debugging
-    μ::Any  # not used in any methods, just here for debugging
+    position::Any # The position, normal, and μ fields are not concretely typed,
+    normal::Any   # but these fields are not used in any of the contact handling algorithms.
+    μ::Any        # Instead, they are just stored for debugging purposes.
     weight::typeof(Ref(1.0)) # In 0.7 and up, this is just Ref{Float64}
     maxnormalforce::typeof(Ref(1.0)) # In 0.7 and up, this is just Ref{Float64}
 
@@ -55,7 +55,6 @@ struct ContactPoint{N}
             Parameter(x -> x .= ret.maxnormalforce[] / (N * sqrt(μ^2 + 1)), zeros(N), model)
         end
         toroot = @expression(transform_to_root(state, position.frame) * z_up_transform(position, normal, normal_aligned_frame))
-        # toroot = let state = state, ret = ret
         hat = RBD.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
         @constraint(model, ρ >= zeros(N))
