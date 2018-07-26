@@ -40,7 +40,7 @@ function defaultoptimizer()
 end
 
 include("tasks.jl")
-include("controller.jl")
 include("notebooks.jl")
+include("controller.jl")
 
 end # module
