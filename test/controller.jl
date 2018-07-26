@@ -33,13 +33,13 @@
         set_configuration!(state, [θ])
         solve!(model)
         # Sanity check our constraint
-        @test value.(model, controller_contact.force_local.v) ≈ [0.0, 0.0, 1.0]
+        @test value.(Ref(model), controller_contact.force_local.v) ≈ [0.0, 0.0, 1.0]
 
         # No matter how we rotate the robot, the contact-aligned frame will still
         # be aligned to the contact normal, which is fixed in world frame. So the
         # linear component of the contact wrench in world frame will always be
         # along [0, 0, 1].
-        @test value.(model, linear(controller_contact.wrench_world)) ≈ [0.0, 0.0, 1.0]
+        @test value.(Ref(model), linear(controller_contact.wrench_world)) ≈ [0.0, 0.0, 1.0]
     end
 end
 
