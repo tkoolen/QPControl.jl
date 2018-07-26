@@ -29,7 +29,7 @@
     # Constrain the contact force to be non-zero for testing
     @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
 
-    for θ in linspace(-π, π)
+    for θ in Compat.range(-π, stop=π, length=10)
         set_configuration!(state, [θ])
         solve!(model)
         # Sanity check our constraint

@@ -7,6 +7,7 @@ using ValkyrieRobot.BipedControlUtil
 using ValkyrieRobot
 using StaticArrays
 using Rotations
+using Compat
 using Compat.Test
 using MathOptInterface
 using OSQP.MathOptInterfaceOSQP
