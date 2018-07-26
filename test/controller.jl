@@ -25,6 +25,7 @@
     end
     controller_contact = QPControl.ContactPoint{4}(position, normal, μ, state, model)
     controller_contact.maxnormalforce[] = 1e3
+    @test QPControl.isenabled(controller_contact)
 
     # Constrain the contact force to be non-zero for testing
     @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
