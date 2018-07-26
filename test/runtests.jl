@@ -27,6 +27,8 @@ macro test_noalloc(expr)
     end |> esc
 end
 
+using Gurobi
+
 function defaultoptimizer()
     optimizer = OSQPOptimizer()
     MOI.set!(optimizer, OSQPSettings.Verbose(), false)
