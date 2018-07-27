@@ -2,10 +2,12 @@ module MomentumBasedControlTests
 
 using QPControl
 using RigidBodyDynamics
+using RigidBodyDynamics.Contact
 using ValkyrieRobot.BipedControlUtil
 using ValkyrieRobot
 using StaticArrays
 using Rotations
+using Compat
 using Compat.Test
 using MathOptInterface
 using OSQP.MathOptInterfaceOSQP
@@ -38,7 +40,7 @@ function defaultoptimizer()
 end
 
 include("tasks.jl")
-include("controller.jl")
 include("notebooks.jl")
+include("controller.jl")
 
 end # module

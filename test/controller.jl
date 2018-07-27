@@ -1,3 +1,49 @@
+@testset "parameterized contacts" begin
+    # Construct a mechanism consisting of a single body which can
+    # rotate about its origin
+    world = RigidBody{Float64}("world")
+    mechanism = Mechanism(world, gravity=SVector(0, 0, -9.81))
+    frame = CartesianFrame3D("body")
+    inertia = SpatialInertia(frame, SDiagonal(1., 1, 1), SVector(0., 0, 0), 10.0)
+    body = RigidBody(inertia)
+    joint = Joint("rx", Revolute(SVector(1., 0, 0)))
+    attach!(mechanism, world, body, joint)
+
+    contactmodel = SoftContactModel(hunt_crossley_hertz(k = 500e3), ViscoelasticCoulombModel(0.8, 20e3, 100.))
+    add_contact_point!(body, Contact.ContactPoint(Point3D(default_frame(body), 0., 0, 0), contactmodel))
+
+    # Make the contact normal a parameter, so that it updates its representation
+    # in body frame to match a fixed orientation in world frame
+    state = MechanismState(mechanism)
+    model = SimpleQP.Model(defaultoptimizer())
+    position = Point3D(default_frame(body), 0., 0, 0)
+    μ = 1.0
+    normal = let state = state, body = body
+        Parameter(model) do
+            transform(state, FreeVector3D(root_frame(state.mechanism), 0., 0, 1), default_frame(body))
+        end
+    end
+    controller_contact = QPControl.ContactPoint{4}(position, normal, μ, state, model)
+    controller_contact.maxnormalforce[] = 1e3
+    @test QPControl.isenabled(controller_contact)
+
+    # Constrain the contact force to be non-zero for testing
+    @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
+
+    for θ in Compat.range(-π, stop=π, length=10)
+        set_configuration!(state, [θ])
+        solve!(model)
+        # Sanity check our constraint
+        @test value.(Ref(model), controller_contact.force_local.v) ≈ [0.0, 0.0, 1.0]
+
+        # No matter how we rotate the robot, the contact-aligned frame will still
+        # be aligned to the contact normal, which is fixed in world frame. So the
+        # linear component of the contact wrench in world frame will always be
+        # along [0, 0, 1].
+        @test value.(Ref(model), linear(controller_contact.wrench_world)) ≈ [0.0, 0.0, 1.0]
+    end
+end
+
 @testset "fixed base joint space control, constrained = $constrained" for constrained in [true, false]
     srand(42)
     mechanism = rand_tree_mechanism(Float64, Prismatic{Float64}, Revolute{Float64}, Revolute{Float64})
@@ -29,13 +75,30 @@
     end
 end
 
-function set_up_valkyrie_contacts!(controller::MomentumBasedController)
+"""
+Automatically load contact points from each body in the mechanism and add them
+to the controller. If `parametric_contact_surface=true`, then the `normal` and
+`μ` associated with each contact will be Parameters set to random, but fixed,
+values.
+"""
+function set_up_valkyrie_contacts!(controller::MomentumBasedController; parametric_contact_surface=false)
     valmechanism = controller.state.mechanism
     for body in bodies(valmechanism)
         for point in RBD.contact_points(body)
             position = RBD.Contact.location(point)
-            normal = FreeVector3D(position.frame, 0.0, 0.0, 1.0)
-            μ = point.model.friction.μ
+            if parametric_contact_surface
+                normal = let frame = position.frame, direction = normalize(randn(SVector{3}))
+                    Parameter(controller.qpmodel) do
+                        FreeVector3D(frame, direction)
+                    end
+                end
+                μ = let μ = rand()
+                    Parameter(() -> μ, controller.qpmodel)
+                end
+            else
+                normal = FreeVector3D(position.frame, 0.0, 0.0, 1.0)
+                μ = point.model.friction.μ
+            end
             addcontact!(controller, body, position, normal, μ)
         end
     end
@@ -91,9 +154,10 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
 
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
-    set_up_valkyrie_contacts!(controller)
+
+    set_up_valkyrie_contacts!(controller; parametric_contact_surface=true)
     ḣtask = MomentumRateTask(mechanism, centroidal_frame(controller))
-    addtask!(controller, ḣtask)#, 1.0)
+    addtask!(controller, ḣtask) #, 1.0)
 
     for joint in tree_joints(mechanism)
         regularize!(controller, joint, 1e-6)
@@ -113,12 +177,10 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
             for contact in controller.contacts[body]
                 active = rand() < p
                 if active
-                    μ = rand()
-                    normal = FreeVector3D(contact.normal.frame, normalize(randn(SVector{3})))
-                    contact.normal = normal
-                    contact.μ = μ
-                    contact.weight = 1e-6
-                    contact.maxnormalforce = MAX_NORMAL_FORCE_FIXME
+                    normal = SimpleQP.evalarg(contact.normal)
+                    μ = SimpleQP.evalarg(contact.μ)
+                    contact.weight[] = 1e-6
+                    contact.maxnormalforce[] = MAX_NORMAL_FORCE_FIXME
                     fnormal = 50. * rand()
                     μreduced = sqrt(2) / 2 * μ # due to polyhedral inner approximation; assumes 4 basis vectors or more
                     ftangential = μreduced * fnormal * rand() * cross(normal, FreeVector3D(normal.frame, normalize(randn(SVector{3}))))
