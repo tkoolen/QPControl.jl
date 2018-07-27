@@ -44,5 +44,6 @@ end
 include("tasks.jl")
 include("notebooks.jl")
 include("controller.jl")
+include("lcp.jl")
 
 end # module

@@ -80,7 +80,27 @@ function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Po
     addcontact!(stage, C(position, normal, μ, controller.state, controller.qpmodel))
 end
 
-function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Point3D, surface::HalfSpace3D, μ::Float64, max_ρ=10000) where C
+abstract type ContactModel end
+
+struct BooleanContact <: ContactModel
+    ρ_max::Float64
+    separation_atol::Float64
+    separation_max::Float64
+end
+
+BooleanContact(; ρ_max=10000, separation_atol=1e-6, separation_max=100) =
+    BooleanContact(ρ_max, separation_atol, separation_max)
+
+struct LCPContact <: ContactModel
+    boolean_params::BooleanContact
+    velocity_max::Float64
+end
+
+LCPContact(; ρ_max=10000, separation_atol=1e-6, separation_max=100, velocity_max=1000) =
+    LCPContact(BooleanContact(ρ_max=ρ_max, separation_atol=separation_atol, separation_max=separation_max), velocity_max)
+
+
+function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Point3D, surface::HalfSpace3D, μ::Float64, contact_model::ContactModel=BooleanContact()) where C
     model = controller.qpmodel
 
     normal_in_body = let state = controller.state, surface = surface, position = position
@@ -89,54 +109,111 @@ function addcontact!(controller::MPCController, stage::MPCStage{C}, position::Po
         end
     end
 
-    indicator = add_boolean_contact_indicator!(controller, stage, position, surface)
     contact_point = C(position, normal_in_body, μ, controller.state, controller.qpmodel)
-    @constraint(model, contact_point.ρ <= fill(max_ρ * indicator, length(contact_point.ρ)))
-
+    add_contact_indicators!(controller, stage, contact_point, surface, contact_model)
     addcontact!(stage, contact_point)
 end
 
-function add_boolean_contact_indicator!(controller::MPCController, stage::MPCStage, position::Point3D, surface::HalfSpace3D, separation_atol=1e-3, separation_max=100)
-    state = controller.state
-    mechanism = state.mechanism
+function add_contact_indicators!(controller::MPCController, stage::MPCStage, contact_point::ContactPoint, surface::HalfSpace3D, contact_model::BooleanContact)
+    model = controller.qpmodel
+    state = Parameter(identity, controller.state, model)
+    mechanism = controller.state.mechanism
+    position = contact_point.position
     body = body_fixed_frame_to_body(mechanism, position.frame)
     path_to_body = path(mechanism, root_body(mechanism), body)
-    model = controller.qpmodel
 
-    position_world = let state = state,  position = position
-        Parameter(model) do
-            transform(state, position, root_frame(state.mechanism))
+    current_position_world = @expression transform(state, position, root_frame(mechanism))
+    J_point = let state = state, position_world = current_position_world, path_to_body = path_to_body
+        Parameter(point_jacobian(state(), path_to_body, position_world()), model) do J
+            point_jacobian!(J, state(), path_to_body, position_world())
         end
     end
-    J_point = let state = state, position_world = position_world, path_to_body = path_to_body
-        Parameter(point_jacobian(state, path_to_body, position_world()), model) do J
-            point_jacobian!(J, state, path_to_body, position_world())
-        end
-    end
-    linearized_position_world = @expression position_world.v + stage.Δt * (J_point.J * stage.v)
+    position_world = @expression current_position_world.v + stage.Δt * (J_point.J * stage.v)
+    surface_world = @expression(HalfSpace3D(
+            transform(state, surface.point, root_frame(mechanism)),
+            transform(state, surface.outward_normal, root_frame(mechanism))))
 
-    surface_world = let surface = surface, state = state
-        Parameter(model) do
-            HalfSpace3D(
-                transform(state, surface.point, root_frame(state.mechanism)),
-                transform(state, surface.outward_normal, root_frame(state.mechanism)))
-        end
-    end
-    separation = @expression(dot(surface_world.outward_normal.v, linearized_position_world) -
+    separation = @expression(dot(surface_world.outward_normal.v, position_world) -
                              dot(surface_world.outward_normal.v, surface_world.point.v))
 
     indicator = Variable(model)
     @constraint(model, indicator ∈ {0, 1})
 
     separation_min = @expression(
-        min((dot(surface_world.outward_normal.v, position_world.v) -
+        min((dot(surface_world.outward_normal.v, current_position_world.v) -
              dot(surface_world.outward_normal.v, surface_world.point.v)),
-             -separation_atol))
+             -contact_model.separation_atol))
 
     @constraint(model, [separation] >= [separation_min])
-    @constraint(model, [separation] <= [separation_atol + separation_max * (1 - indicator)])
+    @constraint(model, [separation] <= [contact_model.separation_atol + contact_model.separation_max * (1 - indicator)])
+    @constraint(model, contact_point.ρ <= fill(contact_model.ρ_max * indicator, length(contact_point.ρ)))
 
     indicator
+end
+
+function tangential_basis(num_basis_vectors::Val{N}) where N
+    Δθ = 2 * π / N
+    basisvectors = ntuple(num_basis_vectors) do i
+        θ = (i - 1) * Δθ
+        SVector(cos(θ), sin(θ), 0.0)
+    end
+    hcat(basisvectors...)
+end
+
+function add_contact_indicators!(controller::MPCController, stage::MPCStage, contact_point::ContactPoint{N}, surface::HalfSpace3D, contact_model::LCPContact) where N
+
+    # separation ⫺ 0 ⟂ contact force ⫺ 0
+    # Covers equations (7) and (10)
+    add_contact_indicators!(controller, stage, contact_point, surface, contact_model.boolean_params)
+
+    model = controller.qpmodel
+    state = Parameter(identity, controller.state, model)
+    mechanism = controller.state.mechanism
+    position = contact_point.position
+    body = body_fixed_frame_to_body(mechanism, position.frame)
+    path_to_body = path(mechanism, root_body(mechanism), body)
+
+    current_position_world = @expression transform(state, position, root_frame(mechanism))
+    J_point = let state = state, position_world = current_position_world, path_to_body = path_to_body
+        Parameter(point_jacobian(state(), path_to_body, position_world()), model) do J
+            point_jacobian!(J, state(), path_to_body, position_world())
+        end
+    end
+    velocity_world = @expression J_point.J * stage.v
+    @assert contact_point.toroot().to == root_frame(mechanism)
+    velocity_local = @expression rotation(inv(contact_point.toroot())) * velocity_world
+
+    # Constraints to enforce sliding friction
+    λ = Variable(model)
+    @constraint(model, [λ] >= [0.0])
+    @constraint(model, [λ] <= [contact_model.velocity_max])
+
+    # The contact point defines variables ρ which multiply the basis vectors
+    # but we need the variables β which multiply just the *tangential* basis.
+    μ = contact_point.μ
+    β = @expression((μ / sqrt(μ * μ + 1)) * contact_point.ρ)
+
+    D = tangential_basis(Val(N))
+    @constraint(model, fill(λ, N) + D' * velocity_local >= zeros(N))  # (8)
+
+    λ_indicator = Variable(model)
+    @constraint(model, λ_indicator ∈ {0, 1})
+    # Equation (12)
+    # λ_indicator == 1 => μc_n - sum(β) == 0
+    # λ_indicator == 0 => λ == 0
+    c_n = @expression(dot(contact_point.force_local, FreeVector3D(contact_point.normal_aligned_frame, 0.0, 0.0, 1.0)))
+    @constraint(model, [μ * c_n - ones(N)' * β] <= [contact_model.boolean_params.ρ_max * (1 - λ_indicator)])
+    @constraint(model, [λ] <= [λ_indicator * contact_model.velocity_max])
+
+    β_indicator = [Variable(model) for _ in 1:N]
+    for i in 1:N
+        @constraint(model, β_indicator[i] ∈ {0, 1})
+    end
+    # Equation (11)
+    # β_indicator[i] == 1 => λ_plus_D'v[i] == 0
+    # β_indicator[i] == 0 => β[i] == 0
+    @constraint(model, fill(λ, N) + D' * velocity_local <= contact_model.velocity_max * (ones(N) - β_indicator))
+    @constraint(model, β <= contact_model.boolean_params.ρ_max * β_indicator)
 end
 
 """

@@ -29,15 +29,18 @@ struct ContactPoint{N}
     ρ::SVector{N, Variable} # basis vector multipliers
     force_local::FreeVector3D{SVector{3, Variable}} # contact force expressed in contact point's normal-aligned frame
     wrench_world::Wrench{Variable}
-    position::Any # The position, normal, and μ fields are not concretely typed,
-    normal::Any   # but these fields are not used in any of the contact handling algorithms.
-    μ::Any        # Instead, they are just stored for debugging purposes.
+    position::Any
+    normal::Any
+    μ::Any
+    toroot::Any
     weight::typeof(Ref(1.0)) # In 0.7 and up, this is just Ref{Float64}
     maxnormalforce::typeof(Ref(1.0)) # In 0.7 and up, this is just Ref{Float64}
 
     function ContactPoint{N}(
             position::Union{Point3D, Parameter{<:Point3D}}, normal::Union{FreeVector3D, Parameter{<:FreeVector3D}}, μ::Union{Float64, Parameter{Float64}},
             state::MechanismState, model::Parametron.Model) where N
+
+        state_param = Parameter(identity, state, model)
         # frames
         normal_aligned_frame = CartesianFrame3D()
         worldframe = root_frame(state.mechanism)
@@ -47,7 +50,9 @@ struct ContactPoint{N}
         force_local = FreeVector3D(normal_aligned_frame, nvars(model, Val(3)))
         wrench_world = Wrench(worldframe, nvars(model, Val(3)), nvars(model, Val(3)))
 
-        ret = new{N}(normal_aligned_frame, ρ, force_local, wrench_world, position, normal, μ, Ref(0.0), Ref(0.0))
+        toroot = @expression(transform_to_root(state_param, position.frame) * z_up_transform(position, normal, normal_aligned_frame))
+
+        ret = new{N}(normal_aligned_frame, ρ, force_local, wrench_world, position, normal, μ, toroot, Ref(0.0), Ref(0.0))
 
         # constraints
         basis = @expression(forcebasis(μ, Val(N)))
@@ -55,10 +60,6 @@ struct ContactPoint{N}
             Parameter(() -> ret.maxnormalforce[], model)
         end
         maxρ = @expression((maxnormalforce / (N * sqrt(μ*μ + 1))) * ones(N))  # μ*μ instead of μ^2 due to https://github.com/tkoolen/Parametron.jl/issues/66
-        state_param = let state = state
-            Parameter(() -> state, model)
-        end
-        toroot = @expression(transform_to_root(state_param, position.frame) * z_up_transform(position, normal, normal_aligned_frame))
         hat = RBD.Spatial.hat
         @constraint(model, force_local.v == basis * ρ)
         @constraint(model, ρ >= zeros(N))
