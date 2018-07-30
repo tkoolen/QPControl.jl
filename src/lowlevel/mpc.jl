@@ -302,7 +302,7 @@ function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint
     [τ]
 end
 
-function addjointlimits!(controller::MPCController, stage::MPCStage, force_max=10000.0)
+function addjointlimits!(controller::MPCController, stage::MPCStage, force_max=100000.0)
     vcat([addjointlimit!(controller, stage, joint, force_max)
           for joint in tree_joints(controller.mechanism)]...)
 end
