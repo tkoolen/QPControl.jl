@@ -29,12 +29,16 @@ struct ContactPoint{N}
     ρ::SVector{N, Variable} # basis vector multipliers
     force_local::FreeVector3D{SVector{3, Variable}} # contact force expressed in contact point's normal-aligned frame
     wrench_world::Wrench{Variable}
-    position::Any
-    normal::Any
-    μ::Any
-    toroot::Any
-    weight::typeof(Ref(1.0)) # In 0.7 and up, this is just Ref{Float64}
-    maxnormalforce::typeof(Ref(1.0)) # In 0.7 and up, this is just Ref{Float64}
+    weight::Base.RefValue{Float64}
+    maxnormalforce::Base.RefValue{Float64}
+
+    # These fields are not concretely typed, so accessing them in an inner loop
+    # will perform poorly. Instead, we can use their values directly in
+    # LazyExpressions, which incurs no performance penalty.
+    position::Union{Point3D, Parameter{<:Point3D}}
+    normal::Union{FreeVector3D, Parameter{<:FreeVector3D}}
+    μ::Union{Float64, Parameter{Float64}}
+    toroot::Union{Transform3D, SimpleQP.LazyExpression}
 
     function ContactPoint{N}(
             position::Union{Point3D, Parameter{<:Point3D}}, normal::Union{FreeVector3D, Parameter{<:FreeVector3D}}, μ::Union{Float64, Parameter{Float64}},
@@ -52,7 +56,7 @@ struct ContactPoint{N}
 
         toroot = @expression(transform_to_root(state_param, position.frame) * z_up_transform(position, normal, normal_aligned_frame))
 
-        ret = new{N}(normal_aligned_frame, ρ, force_local, wrench_world, position, normal, μ, toroot, Ref(0.0), Ref(0.0))
+        ret = new{N}(normal_aligned_frame, ρ, force_local, wrench_world, Ref(0.0), Ref(0.0), position, normal, μ, toroot, )
 
         # constraints
         basis = @expression(forcebasis(μ, Val(N)))
