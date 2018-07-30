@@ -216,7 +216,7 @@ function add_contact_indicators!(controller::MPCController, stage::MPCStage, con
     @constraint(model, β <= contact_model.boolean_params.ρ_max * β_indicator)
 end
 
-function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint, τ_max=10000.0)
+function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint, τ_max::Real)
     bounds = RigidBodyDynamics.position_bounds(joint)
     lb = RigidBodyDynamics.lower.(bounds)
     ub = RigidBodyDynamics.upper.(bounds)
@@ -241,7 +241,7 @@ function total_Δt(controller::MPCController, stage::MPCStage)
     sum(s -> s.Δt, controller.stages[1:stage_index])
 end
 
-function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint{<:Any, <:OneDegreeOfFreedomFixedAxis}, τ_max=10000.0)
+function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint{<:Any, <:OneDegreeOfFreedomFixedAxis}, τ_max::Real)
     @assert num_velocities(joint) == 1
 
     bounds = only(RigidBodyDynamics.position_bounds(joint))
@@ -252,19 +252,32 @@ function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint
     τ = Variable(model)
     if isfinite(q_lb) || isfinite(q_ub)
         (isfinite(q_lb) && isfinite(q_ub)) || throw(ArgumentError("Upper and lower bounds must be both finite or both infinite"))
+
+        # indicator_lb is 1 iff this joint is at its lower limit
         indicator_lb = Variable(model)
-        indicator_ub = Variable(model)
-
-        qrange = configuration_range(controller.state, joint)
-        qjoint = stage.q[qrange]
-
         @constraint(model, indicator_lb ∈ {0, 1})
-        @constraint(model, qjoint >= [q_ub - (q_ub - q_lb) * (1 - indicator_ub)])
+        # indicator_ub is 1 iff this joint is at its upper limit
+        indicator_ub = Variable(model)
         @constraint(model, indicator_ub ∈ {0, 1})
-        @constraint(model, qjoint <= [q_lb + (q_ub - q_lb) * (1 - indicator_lb)])
+
+        state = Parameter(identity, controller.state, model)
+        q_current = @expression only(configuration(state, joint))
+        q_next = stage.q[configuration_range(controller.state, joint)]
+        # If the joint is *already* violating its limits (e.g. due to soft
+        # enforcement in the simulator), then we adjust the lower and upper bounds
+        # accordingly. Otherwise soft enforcement in the simulation can make the control
+        # problem infeasible.
+        q_lb_widened = @expression min(q_current, q_lb)
+        q_ub_widened = @expression max(q_current, q_ub)
+        q_range = @expression q_ub_widened - q_lb_widened
+
+        @constraint(model, q_next <= [q_lb_widened + q_range * (1 - indicator_lb)])
+        @constraint(model, q_next >= [q_ub_widened - q_range * (1 - indicator_ub)])
         @constraint(model, [indicator_lb + indicator_ub] <= 1)
 
+        # If indicator_lb is zero, then τ <= 0
         @constraint(model, [τ] <= [τ_max * indicator_lb])
+        # If indicator_ub is zero, then τ >= 0
         @constraint(model, [τ] >= [-τ_max * indicator_ub])
 
         # Most joints will be far from their upper or lower limit most of the time,
@@ -275,13 +288,12 @@ function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint
         v_ub = RigidBodyDynamics.upper(only(RigidBodyDynamics.velocity_bounds(joint)))
 
         Δt = total_Δt(controller, stage)
-        state = Parameter(identity, controller.state, model)
 
-        q_after_max_v = @expression only(configuration(state, joint)) + v_ub * Δt
+        q_after_max_v = @expression q_current + v_ub * Δt
         indicator_ub_restriction = @expression(ifelse(q_after_max_v < q_ub, 0.0, 1.0))
         @constraint(model, [indicator_ub] <= [indicator_ub_restriction])
 
-        q_after_min_v = @expression only(configuration(state, joint)) + v_lb * Δt
+        q_after_min_v = @expression q_current + v_lb * Δt
         indicator_lb_restriction = @expression(ifelse(q_after_min_v > q_lb, 0.0, 1.0))
         @constraint(model, [indicator_lb] <= [indicator_lb_restriction])
     else
