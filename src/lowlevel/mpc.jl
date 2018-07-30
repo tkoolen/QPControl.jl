@@ -216,6 +216,86 @@ function add_contact_indicators!(controller::MPCController, stage::MPCStage, con
     @constraint(model, β <= contact_model.boolean_params.ρ_max * β_indicator)
 end
 
+function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint, τ_max=10000.0)
+    bounds = RigidBodyDynamics.position_bounds(joint)
+    lb = RigidBodyDynamics.lower.(bounds)
+    ub = RigidBodyDynamics.upper.(bounds)
+    if any(isfinite, lb) || any(isfinite, ub)
+        throw(ArgumentError("Cannot apply position bound enforcement torques to this joint type: $(joint.joint_type). You may set the position bounds on this joint to (-Inf, Inf) to avoid attempting to add such torques."))
+    end
+    τ = [Variable(controller.qpmodel) for _ in 1:num_velocities(joint)]
+    if num_velocities(joint) > 0
+        @constraint(controller.qpmodel, τ == zeros(num_velocities(joint)))
+    end
+    τ
+end
+
+function total_Δt(controller::MPCController, stage::MPCStage)
+    # Compute the total time until the end of the given stage
+    stage_index = findfirst(controller.stages, stage)
+    if VERSION <= v"0.7-alpha"
+        @assert stage_index != 0        # 0.6
+    else
+        @assert stage_index !== nothing # 0.7
+    end
+    sum(s -> s.Δt, controller.stages[1:stage_index])
+end
+
+function addjointlimit!(controller::MPCController, stage::MPCStage, joint::Joint{<:Any, <:OneDegreeOfFreedomFixedAxis}, τ_max=10000.0)
+    @assert num_velocities(joint) == 1
+
+    bounds = only(RigidBodyDynamics.position_bounds(joint))
+    q_lb = RigidBodyDynamics.lower(bounds)
+    q_ub = RigidBodyDynamics.upper(bounds)
+
+    model = controller.qpmodel
+    τ = Variable(model)
+    if isfinite(q_lb) || isfinite(q_ub)
+        (isfinite(q_lb) && isfinite(q_ub)) || throw(ArgumentError("Upper and lower bounds must be both finite or both infinite"))
+        indicator_lb = Variable(model)
+        indicator_ub = Variable(model)
+
+        qrange = configuration_range(controller.state, joint)
+        qjoint = stage.q[qrange]
+
+        @constraint(model, indicator_lb ∈ {0, 1})
+        @constraint(model, qjoint >= [q_ub - (q_ub - q_lb) * (1 - indicator_ub)])
+        @constraint(model, indicator_ub ∈ {0, 1})
+        @constraint(model, qjoint <= [q_lb + (q_ub - q_lb) * (1 - indicator_lb)])
+        @constraint(model, [indicator_lb + indicator_ub] <= 1)
+
+        @constraint(model, [τ] <= [τ_max * indicator_lb])
+        @constraint(model, [τ] >= [-τ_max * indicator_ub])
+
+        # Most joints will be far from their upper or lower limit most of the time,
+        # so we can simplify the optimization by checking if a joint could possibly
+        # hit its limit during the given optimization and eliminate one or both
+        # indicator variables if it cannot.
+        v_lb = RigidBodyDynamics.lower(only(RigidBodyDynamics.velocity_bounds(joint)))
+        v_ub = RigidBodyDynamics.upper(only(RigidBodyDynamics.velocity_bounds(joint)))
+
+        Δt = total_Δt(controller, stage)
+        state = Parameter(identity, controller.state, model)
+
+        q_after_max_v = @expression only(configuration(state, joint)) + v_ub * Δt
+        indicator_ub_restriction = @expression(ifelse(q_after_max_v < q_ub, 0.0, 1.0))
+        @constraint(model, [indicator_ub] <= [indicator_ub_restriction])
+
+        q_after_min_v = @expression only(configuration(state, joint)) + v_lb * Δt
+        indicator_lb_restriction = @expression(ifelse(q_after_min_v > q_lb, 0.0, 1.0))
+        @constraint(model, [indicator_lb] <= [indicator_lb_restriction])
+    else
+        @constraint(model, [τ] == [0.0])
+    end
+    [τ]
+end
+
+function addjointlimits!(controller::MPCController, stage::MPCStage, force_max=10000.0)
+    vcat([addjointlimit!(controller, stage, joint, force_max)
+          for joint in tree_joints(controller.mechanism)]...)
+end
+
+
 """
 Holds a few useful dynamics parameters which are re-used for each stage in the MPC
 optmization.
@@ -238,8 +318,10 @@ function generalized_torque(state, contact_point::ContactPoint, model::Model)
     @expression adjoint(angular(J_body_to_root)) * angular(contact_point.wrench_world) + adjoint(linear(J_body_to_root)) * linear(contact_point.wrench_world)
 end
 
-function initialize!(stage::MPCStage, model::Model, state::MechanismState,
+function initialize!(controller::MPCController, stage::MPCStage,
                      params::DynamicsParams, q_prev, v_prev)
+    model = controller.qpmodel
+    state = controller.state
     @assert !stage.initialized[]
     Δt = stage.Δt
     H = params.H
@@ -249,7 +331,8 @@ function initialize!(stage::MPCStage, model::Model, state::MechanismState,
     for contact in stage.contacts
         τ_ext = @expression τ_ext + generalized_torque(state, contact, model)
     end
-    @constraint(model, H * (stage.v - v_prev) == Δt * (stage.u - c - τ_ext))
+    τ_joint_limit = addjointlimits!(controller, stage)
+    @constraint(model, H * (stage.v - v_prev) == Δt * (stage.u + τ_joint_limit - c - τ_ext))
     q̇ = @expression(J_qv * stage.v)
     @constraint(model, q̇ == (1 / Δt) * (stage.q - q_prev))
     @constraint(model, stage.v̇ == (1 / Δt) * (stage.v - v_prev))
@@ -292,7 +375,7 @@ function initialize!(controller::MPCController)
             v_prev = controller.stages[i - 1].v
         end
         stage = controller.stages[i]
-        initialize!(stage, controller.qpmodel, controller.state, dynamics_params, q_prev, v_prev)
+        initialize!(controller, stage, dynamics_params, q_prev, v_prev)
     end
     controller.initialized[] = true
 end

@@ -41,6 +41,7 @@ export
 using Compat
 using Compat.LinearAlgebra
 using RigidBodyDynamics
+using RigidBodyDynamics: OneDegreeOfFreedomFixedAxis
 using RigidBodyDynamics.Graphs
 using RigidBodyDynamics.Contact
 using RigidBodyDynamics.PDControl
@@ -53,6 +54,7 @@ import MathOptInterface
 const MOI = MathOptInterface
 const RBD = RigidBodyDynamics
 
+include("utils.jl")
 include("contacts.jl")
 include("tasks.jl")
 include("exceptions.jl")
