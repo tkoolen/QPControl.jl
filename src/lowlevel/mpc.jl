@@ -17,7 +17,7 @@ struct MPCController{C, O <: MOI.AbstractOptimizer, M <: Mechanism, S <: Mechani
     dynamicsresult::DynamicsResult{Float64, Float64}
     qpmodel::SimpleQP.Model{Float64, O}
     stages::Vector{MPCStage{C}}
-    initialized::typeof(Ref(false))
+    initialized::Base.RefValue{Bool}
 
     function MPCController{C}(mechanism::Mechanism, optimizer::O) where {C, O <: MOI.AbstractOptimizer}
         state = MechanismState(mechanism)
@@ -217,7 +217,7 @@ function add_contact_indicators!(controller::MPCController, stage::MPCStage, con
 end
 
 """
-Holds a few useful dynamics paramters which are re-used for each stage in the MPC
+Holds a few useful dynamics parameters which are re-used for each stage in the MPC
 optmization.
 """
 struct DynamicsParams{TH, Tc, TJ}
@@ -268,7 +268,7 @@ function initialize!(controller::MPCController)
         end
     end
     c = let state = controller.state, result = controller.dynamicsresult
-        Parameter(result.dynamicsbias, model) do c
+        Parameter(result.dynamicsbias, model) do _
             dynamics_bias!(result, state)
         end
     end
