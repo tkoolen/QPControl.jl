@@ -83,6 +83,45 @@ function task_error(task::AngularAccelerationTask, qpmodel, state::MechanismStat
     @expression angular(J) * v̇ + angular(J̇v) - desired
 end
 
+struct LinearAccelerationTask <: AbstractMotionTask
+    path::TreePath{RigidBody{Float64}, Joint{Float64}}
+    jacobian::GeometricJacobian{Matrix{Float64}}
+    desired::Base.RefValue{FreeVector3D{SVector{3, Float64}}}
+
+    function LinearAccelerationTask(
+                mechanism::Mechanism,
+                path::TreePath{RigidBody{Float64}, Joint{Float64}};
+                frame::CartesianFrame3D = default_frame(target(path)))
+        nv = num_velocities(mechanism)
+        bodyframe = default_frame(target(path))
+        baseframe = default_frame(source(path))
+        jacobian = GeometricJacobian(bodyframe, baseframe, frame, zeros(3, nv), zeros(3, nv))
+        desired = Ref(FreeVector3D(frame, 0.0, 0.0, 0.0))
+        new(path, jacobian, desired)
+    end
+end
+
+dimension(task::LinearAccelerationTask) = 3
+
+function setdesired!(task::LinearAccelerationTask, desired::FreeVector3D)
+    @framecheck task.desired[].frame desired.frame
+    task.desired[] = desired
+    nothing
+end
+
+function task_error(task::LinearAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+    J = Parameter(task.jacobian, qpmodel) do jac
+        world_to_desired = inv(transform_to_root(state, task.desired[].frame))
+        geometric_jacobian!(jac, state, task.path, world_to_desired)
+    end
+    J̇v = Parameter{SpatialAcceleration{Float64}}(qpmodel) do
+        bias = -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
+        transform(state, bias, task.desired[].frame)
+    end
+    desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
+    @expression linear(J) * v̇ + linear(J̇v) - desired
+end
+
 
 struct JointAccelerationTask{JT<:JointType{Float64}} <: AbstractMotionTask
     joint::Joint{Float64, JT}
