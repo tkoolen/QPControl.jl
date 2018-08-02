@@ -63,6 +63,59 @@ end
     end
 end
 
+@testset "PointAccelerationTask" begin
+    mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
+    state = MechanismState(mechanism)
+    rand_configuration!(state)
+    nv = num_velocities(mechanism)
+    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    qpmodel = MockModel()
+    for testnum = 1 : 10
+        base = rand(bodies(mechanism))
+        body = rand(setdiff(bodies(mechanism), [base]))
+        path_to_body = RBD.path(mechanism, base, body)
+        point = Point3D(default_frame(body), randn(SVector{3, Float64}))
+        task = PointAccelerationTask(mechanism, path_to_body, point)
+        err = QPC.task_error(task, qpmodel, state, v̇)
+
+        bodyframe = default_frame(body)
+        baseframe = default_frame(base)
+        desired = FreeVector3D(baseframe, SVector(1., 2, 3))
+        QPC.setdesired!(task, desired)
+
+        zero_velocity!(state)
+        v̇0 = zeros(length(v̇))
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -desired.v
+
+        QPC.setdesired!(task, zero(desired))
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == zeros(3)
+
+        rand_velocity!(state)
+        T = transform(state, relative_twist(state, body, base), baseframe)
+        ω = angular(T)
+        ṗ = point_velocity(T, transform(state, point, baseframe))
+        bias = transform(state,
+            -RBD.bias_acceleration(state, base) + RBD.bias_acceleration(state, body),
+            baseframe)
+        expected = ω × ṗ.v + (angular(bias) × transform(state, point, baseframe).v + linear(bias))
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == expected
+
+        zero_velocity!(state)
+        setdirty!(qpmodel)
+        v̇rand = rand(nv)
+        J_point = point_jacobian(state, path_to_body, transform(state, point, baseframe))
+        expected = point_velocity(J_point, v̇rand).v
+        setdirty!(qpmodel)
+        @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ expected atol=1e-12
+
+        allocs = @allocated err()
+        @test allocs == 0
+    end
+end
+
 
 @testset "LinearAccelerationTask" begin
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)

@@ -122,6 +122,53 @@ function task_error(task::LinearAccelerationTask, qpmodel, state::MechanismState
     @expression linear(J) * v̇ + linear(J̇v) - desired
 end
 
+struct PointAccelerationTask <: AbstractMotionTask
+    path::TreePath{RigidBody{Float64}, Joint{Float64}}
+    jacobian::PointJacobian{Matrix{Float64}}
+    point::Point3D{SVector{3, Float64}}
+    desired::Base.RefValue{FreeVector3D{SVector{3, Float64}}}
+
+    function PointAccelerationTask(
+                mechanism::Mechanism,
+                path::TreePath{RigidBody{Float64}, Joint{Float64}},
+                point::Point3D)
+        nv = num_velocities(mechanism)
+        bodyframe = default_frame(target(path))
+        baseframe = default_frame(source(path))
+        @framecheck point.frame bodyframe
+        jacobian = PointJacobian(zeros(3, nv), baseframe)
+        desired = Ref(FreeVector3D(baseframe, 0.0, 0.0, 0.0))
+        new(path, jacobian, point, desired)
+    end
+end
+
+dimension(task::PointAccelerationTask) = 3
+
+function setdesired!(task::PointAccelerationTask, desired::FreeVector3D)
+    @framecheck task.desired[].frame desired.frame
+    task.desired[] = desired
+    nothing
+end
+
+function task_error(task::PointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+    frame = task.desired[].frame
+    state_param = Parameter(identity, state, qpmodel)
+    point_in_task_frame = @expression transform(state_param, task.point, frame)
+    J = Parameter(task.jacobian, qpmodel) do jac
+        point_jacobian!(jac, state, task.path, point_in_task_frame())
+        jac
+    end
+    J̇v = Parameter{SpatialAcceleration{Float64}}(qpmodel) do
+        bias = -bias_acceleration(state, source(task.path)) + bias_acceleration(state, target(task.path))
+        transform(state, bias, frame)
+    end
+    desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
+    T = @expression transform(state_param, relative_twist(state_param, target(task.path), source(task.path)), frame)
+    @framecheck T().frame frame
+    ω = @expression angular(T)
+    ṗ = @expression point_velocity(T, point_in_task_frame)
+    @expression ω × ṗ.v + J.J * v̇ + (angular(J̇v) × point_in_task_frame.v + linear(J̇v)) - desired
+end
 
 struct JointAccelerationTask{JT<:JointType{Float64}} <: AbstractMotionTask
     joint::Joint{Float64, JT}
