@@ -12,6 +12,8 @@ export
     AbstractMotionTask,
     SpatialAccelerationTask,
     AngularAccelerationTask,
+    LinearAccelerationTask,
+    PointAccelerationTask,
     JointAccelerationTask,
     MomentumRateTask,
     LinearMomentumRateTask,
