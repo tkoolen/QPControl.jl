@@ -9,6 +9,7 @@
     tasks = Dict{Joint{Float64, Revolute{Float64}}, JointAccelerationTask{Revolute{Float64}}}()
     for joint in tree_joints(mechanism)
         task = JointAccelerationTask(joint)
+        @test QPC.dimension(task) == num_velocities(joint)
         tasks[joint] = task
         setdesired!(task, rand())
     end
@@ -32,6 +33,7 @@ end
         body = rand(setdiff(bodies(mechanism), [base]))
         p = RBD.path(mechanism, base, body)
         task = AngularAccelerationTask(mechanism, p)
+        @test QPC.dimension(task) == 3
         err = QPC.task_error(task, qpmodel, state, v̇)
 
         bodyframe = default_frame(body)
@@ -76,6 +78,7 @@ end
         path_to_body = RBD.path(mechanism, base, body)
         point = Point3D(default_frame(body), randn(SVector{3, Float64}))
         task = PointAccelerationTask(mechanism, path_to_body, point)
+        @test QPC.dimension(task) == 3
         err = QPC.task_error(task, qpmodel, state, v̇)
 
         bodyframe = default_frame(body)
@@ -129,6 +132,7 @@ end
         body = rand(setdiff(bodies(mechanism), [base]))
         p = RBD.path(mechanism, base, body)
         task = LinearAccelerationTask(mechanism, p)
+        @test QPC.dimension(task) == 3
         err = QPC.task_error(task, qpmodel, state, v̇)
 
         bodyframe = default_frame(body)
@@ -172,6 +176,7 @@ end
         body = rand(setdiff(bodies(mechanism), [base]))
         p = RBD.path(mechanism, base, body)
         task = SpatialAccelerationTask(mechanism, p)
+        @test QPC.dimension(task) == 6
         err = QPC.task_error(task, qpmodel, state, v̇)
 
         bodyframe = default_frame(body)
@@ -213,6 +218,7 @@ end
 
     centroidalframe = CartesianFrame3D("centroidal")
     task = MomentumRateTask(mechanism, centroidalframe)
+    @test QPC.dimension(task) == 6
     err = QPC.task_error(task, qpmodel, state, v̇)
 
     angular, linear = SVector(1., 2., 3.), SVector(4., 5., 6.)
