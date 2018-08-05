@@ -167,6 +167,7 @@ function add_contact_indicators!(controller::MPCController, stage::MPCStage, con
     add_contact_indicators!(controller, stage, contact_point, surface, contact_model.boolean_params)
 
     model = controller.qpmodel
+    @assert num_additional_states(controller.state) == 0
     state = Parameter(identity, controller.state, model)
     mechanism = controller.state.mechanism
     position = contact_point.position
@@ -179,6 +180,7 @@ function add_contact_indicators!(controller::MPCController, stage::MPCStage, con
             point_jacobian!(J, state(), path_to_body, position_world())
         end
     end
+    @framecheck J_point().frame root_frame(mechanism)
     velocity_world = @expression J_point.J * stage.v
     @assert contact_point.toroot().to == root_frame(mechanism)
     velocity_local = @expression rotation(inv(contact_point.toroot())) * velocity_world
@@ -315,7 +317,7 @@ optmization.
 struct DynamicsParams{TH, Tc, TJ}
     H::TH
     c::Tc
-    J_qv::TJ
+    J_v_to_qdot::TJ
 end
 
 function generalized_torque(state, contact_point::ContactPoint, model::Model)
@@ -338,24 +340,23 @@ function initialize!(controller::MPCController, stage::MPCStage,
     Δt = stage.Δt
     H = params.H
     c = params.c
-    J_qv = params.J_qv
+    J_v_to_qdot = params.J_v_to_qdot
     τ_ext = zeros(num_velocities(state))
     for contact in stage.contacts
         τ_ext = @expression τ_ext + generalized_torque(state, contact, model)
     end
+
     τ_joint_limit = addjointlimits!(controller, stage)
     @constraint(model, H * (stage.v - v_prev) == Δt * (stage.u + τ_joint_limit - c - τ_ext))
-    q̇ = @expression(J_qv * stage.v)
+    q̇ = @expression(J_v_to_qdot * stage.v)
     @constraint(model, q̇ == (1 / Δt) * (stage.q - q_prev))
     @constraint(model, stage.v̇ == (1 / Δt) * (stage.v - v_prev))
     stage.initialized[] = true
 end
 
-
 function initialize!(controller::MPCController)
     @assert !controller.initialized[]
     model = controller.qpmodel
-    # terminal_state_cost = controller.terminal_state_cost
 
     H = let state = controller.state
         Parameter(mass_matrix(state), model) do H
@@ -365,14 +366,16 @@ function initialize!(controller::MPCController)
     c = let state = controller.state, result = controller.dynamicsresult
         Parameter(result.dynamicsbias, model) do _
             dynamics_bias!(result, state)
+            result.dynamicsbias
         end
     end
-    J_qv = let state = controller.state
+
+    J_v_to_qdot = let state = controller.state
         Parameter(velocity_to_configuration_derivative_jacobian(state), model) do J
             velocity_to_configuration_derivative_jacobian!(J, state)
         end
     end
-    dynamics_params = DynamicsParams(H, c, J_qv)
+    dynamics_params = DynamicsParams(H, c, J_v_to_qdot)
 
     for i in eachindex(controller.stages)
         if i == 1
@@ -392,19 +395,21 @@ function initialize!(controller::MPCController)
     controller.initialized[] = true
 end
 
-function (controller::MPCController)(τ::AbstractVector, t::Number, x::Union{<:Vector, <:MechanismState})
+function (controller::MPCController)(τ::AbstractVector, t::Number, x::MechanismState)
     if !controller.initialized[]
         initialize!(controller)
     end
     @assert controller.initialized[]
-    # println("got:    ", Vector(configuration(x)), " ", Vector(velocity(x)))
 
-    copyto!(controller.state, x)
+    set_configuration!(controller.state, configuration(x))
+    set_velocity!(controller.state, velocity(x))
+    # copyto!(controller.state, x)
     solve!(controller.qpmodel)
     τ .= SimpleQP.value.(controller.qpmodel, first(stages(controller)).u)
     if any(isnan, τ)
         @show SimpleQP.primalstatus(controller.qpmodel)
         @show t, Vector(x), τ
+
     end
-    # println("expect: ", SimpleQP.value.(controller.qpmodel, controller.stages[1].q), " ", SimpleQP.value.(controller.qpmodel, controller.stages[1].q))
+    τ
 end
