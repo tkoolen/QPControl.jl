@@ -109,7 +109,7 @@ end
     mechanism = val.mechanism
     floatingjoint = val.basejoint
     N = 4
-    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer(), floatingjoint=floatingjoint)
     set_up_valkyrie_contacts!(controller)
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
@@ -153,7 +153,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     τ = similar(velocity(state))
 
     N = 4
-    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer(), floatingjoint=floatingjoint)
 
     set_up_valkyrie_contacts!(controller; parametric_contact_surface=true)
     ḣtask = MomentumRateTask(mechanism, centroidal_frame(controller))
@@ -218,7 +218,7 @@ end
     srand(533)
     rand!(state)
     N = 4
-    controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
+    controller = MomentumBasedController{N}(mechanism, defaultoptimizer(), floatingjoint=floatingjoint)
     body = val.feet[left]
     base = val.palms[right]
     frame = default_frame(base)

@@ -12,9 +12,11 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
     objective::SimpleQP.LazyExpression # buffer to incrementally build the objective function
     initialized::Bool
 
-    function MomentumBasedController{N}(mechanism::Mechanism{Float64}, optimizer::O; floatingjoint=nothing) where {N, O<:MOI.AbstractOptimizer}
+    function MomentumBasedController{N}(
+            mechanism::Mechanism{Float64}, optimizer::O; floatingjoint=nothing) where {N, O<:MOI.AbstractOptimizer}
         state = MechanismState(mechanism)
         result = DynamicsResult(mechanism)
+        floating_joint_velocity_range = floatingjoint == nothing ? (1 : 0) : velocity_range(state, floatingjoint)
         worldframe = root_frame(mechanism)
         centroidalframe = CartesianFrame3D("centroidal")
         nv = num_velocities(state)
@@ -25,13 +27,9 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
         qpmodel = SimpleQP.Model(optimizer)
         v̇ = [Variable(qpmodel) for _ = 1 : nv]
         objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
-        if floatingjoint === nothing
-            floating_joint_velocity_range = 0:0
-        else
-            floating_joint_velocity_range = velocity_range(state, floatingjoint)
-        end
         new{N, O, typeof(state)}(
-            state, result, floatingjoint, floating_joint_velocity_range, centroidalframe, momentum_matrix, contacts, contactwrenches, qpmodel, v̇, objective, false)
+            state, result, floatingjoint, floating_joint_velocity_range, centroidalframe,
+            momentum_matrix, contacts, contactwrenches, qpmodel, v̇, objective, false)
     end
 end
 
