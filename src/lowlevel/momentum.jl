@@ -168,10 +168,11 @@ function add_wrench_balance_constraint!(controller::MomentumBasedController{N}, 
     A = Parameter(A -> momentum_matrix!(A, state), controller.momentum_matrix, qpmodel)
     Ȧv = Parameter{Wrench{Float64}}(() -> momentum_rate_bias(state), qpmodel)
     Wg = Parameter{Wrench{Float64}}(() -> Wrench(center_of_mass(state) × fg, fg), qpmodel)
-    S = let state = state, joint = joint
+    S = let state = state, joint = joint, floatingbody = successor(joint, mechanism)
         Parameter(qpmodel) do
             qjoint = configuration(state, joint)
-            motion_subspace(joint, qjoint)
+            H = transform_to_root(state, floatingbody)
+            transform(motion_subspace(joint, qjoint), H)
         end
     end
 
