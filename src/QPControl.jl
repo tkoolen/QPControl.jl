@@ -32,14 +32,14 @@ export
     StandingController
 
 using Compat
+using Compat.LinearAlgebra
 using RigidBodyDynamics
 using RigidBodyDynamics.Graphs
 using RigidBodyDynamics.Contact
 using RigidBodyDynamics.PDControl
-using SimpleQP
+using Parametron
 using StaticArrays
 using Rotations
-using Nullables
 
 import MathOptInterface
 

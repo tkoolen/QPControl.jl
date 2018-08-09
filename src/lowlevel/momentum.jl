@@ -7,9 +7,9 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
     momentum_matrix::MomentumMatrix{Matrix{Float64}}
     contacts::Dict{RigidBody{Float64}, Vector{ContactPoint{N}}}
     contactwrenches::Dict{BodyID, Wrench{Float64}}
-    qpmodel::SimpleQP.Model{Float64, O}
+    qpmodel::Parametron.Model{Float64, O}
     v̇::Vector{Variable}
-    objective::SimpleQP.LazyExpression # buffer to incrementally build the objective function
+    objective::Parametron.LazyExpression # buffer to incrementally build the objective function
     initialized::Bool
 
     function MomentumBasedController{N}(
@@ -24,9 +24,9 @@ mutable struct MomentumBasedController{N, O<:MOI.AbstractOptimizer, S<:Mechanism
         rootframe = root_frame(mechanism)
         contacts = Dict{RigidBody{Float64}, Vector{ContactPoint{N}}}()
         contactwrenches = Dict{BodyID, Wrench{Float64}}()
-        qpmodel = SimpleQP.Model(optimizer)
+        qpmodel = Parametron.Model(optimizer)
         v̇ = [Variable(qpmodel) for _ = 1 : nv]
-        objective = SimpleQP.LazyExpression(identity, zero(QuadraticFunction{Float64}))
+        objective = Parametron.LazyExpression(identity, zero(QuadraticFunction{Float64}))
         new{N, O, typeof(state)}(
             state, result, floatingjoint, floating_joint_velocity_range, centroidalframe,
             momentum_matrix, contacts, contactwrenches, qpmodel, v̇, objective, false)
@@ -59,7 +59,9 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     checkstatus(qpmodel)
 
     # extract joint accelerations and contact wrenches
-    result.v̇ .= value.(qpmodel, controller.v̇)
+    @inbounds for i in eachindex(controller.v̇)
+        result.v̇[i] = value(qpmodel, controller.v̇[i])
+    end
     empty!(contactwrenches)
     for body in keys(controller.contacts)
         contactwrench = zero(Wrench{Float64}, worldframe)
@@ -78,7 +80,7 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
     τ
 end
 
-function checkstatus(qpmodel::SimpleQP.Model)
+function checkstatus(qpmodel::Parametron.Model)
     ok = terminationstatus(qpmodel) == MOI.Success && primalstatus(qpmodel) == MOI.FeasiblePoint
     if !ok
         okish = terminationstatus(qpmodel) == MOI.AlmostSuccess && primalstatus(qpmodel) == MOI.UnknownResultStatus

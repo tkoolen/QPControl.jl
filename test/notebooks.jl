@@ -8,7 +8,7 @@
         lowercase(ext) == ".ipynb" || continue
 
         @eval module $(gensym()) # Each notebook is run in its own module.
-        using Base.Test
+        using Compat.Test
         using NBInclude
         @testset "$($name)" begin
             @nbinclude($path; regex = r"^((?!\#NBSKIP).)*$"s) # Use #NBSKIP in a cell to skip it during tests.

@@ -22,7 +22,7 @@ function forcebasis(μ::Float64, num_basis_vectors::Val{N}) where N
     hcat(basisvectors...)
 end
 
-nvars(model::SimpleQP.Model, ::Val{N}) where {N} = SVector(ntuple(_ -> Variable(model), Val(N)))
+nvars(model::Parametron.Model, ::Val{N}) where {N} = SVector(ntuple(_ -> Variable(model), Val(N)))
 
 struct ContactPoint{N}
     normal_aligned_frame::CartesianFrame3D
@@ -37,7 +37,7 @@ struct ContactPoint{N}
 
     function ContactPoint{N}(
             position::Union{Point3D, Parameter{<:Point3D}}, normal::Union{FreeVector3D, Parameter{<:FreeVector3D}}, μ::Union{Float64, Parameter{Float64}},
-            state::MechanismState, model::SimpleQP.Model) where N
+            state::MechanismState, model::Parametron.Model) where N
         # frames
         normal_aligned_frame = CartesianFrame3D()
         worldframe = root_frame(state.mechanism)
@@ -54,7 +54,7 @@ struct ContactPoint{N}
         maxnormalforce = let ret = ret
             Parameter(() -> ret.maxnormalforce[], model)
         end
-        maxρ = @expression((maxnormalforce / (N * sqrt(μ*μ + 1))) * ones(N))  # μ*μ instead of μ^2 due to https://github.com/tkoolen/SimpleQP.jl/issues/66
+        maxρ = @expression((maxnormalforce / (N * sqrt(μ*μ + 1))) * ones(N))  # μ*μ instead of μ^2 due to https://github.com/tkoolen/Parametron.jl/issues/66
         state_param = let state = state
             Parameter(() -> state, model)
         end
@@ -72,14 +72,14 @@ end
 disable!(point::ContactPoint) = point.maxnormalforce[] = 0
 isenabled(point::ContactPoint) = point.maxnormalforce[] > 0
 
-function objectiveterm(point::ContactPoint, model::SimpleQP.Model)
+function objectiveterm(point::ContactPoint, model::Parametron.Model)
     weight = Parameter{Float64}(() -> point.weight[], model)
     f = point.force_local
     @expression weight * (f ⋅ f)
 end
 
 # TODO: type piracy:
-function SimpleQP.value(m::SimpleQP.Model, wrench::Wrench{Variable})
+function Parametron.value(m::Parametron.Model, wrench::Wrench{Variable})
     # Wrench(wrench.frame, value.(Ref(m), angular(wrench)), value.(Ref(m), linear(wrench))) # allocates on 0.6
     τ = angular(wrench)
     f = linear(wrench)
