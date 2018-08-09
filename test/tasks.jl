@@ -3,7 +3,7 @@
     state = MechanismState(mechanism)
     rand!(state)
     nv = num_velocities(mechanism)
-    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    v̇ = [Parametron.Variable(i) for i = 1 : nv]
     v̇vals = rand!(similar(velocity(state)))
     qpmodel = MockModel()
     tasks = Dict{Joint{Float64, Revolute{Float64}}, JointAccelerationTask{Revolute{Float64}}}()
@@ -26,7 +26,7 @@ end
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
-    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    v̇ = [Parametron.Variable(i) for i = 1 : nv]
     qpmodel = MockModel()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
@@ -70,7 +70,7 @@ end
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
-    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    v̇ = [Parametron.Variable(i) for i = 1 : nv]
     qpmodel = MockModel()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
@@ -125,7 +125,7 @@ end
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
-    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    v̇ = [Parametron.Variable(i) for i = 1 : nv]
     qpmodel = MockModel()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
@@ -169,7 +169,7 @@ end
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
-    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    v̇ = [Parametron.Variable(i) for i = 1 : nv]
     qpmodel = MockModel()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
@@ -213,7 +213,7 @@ end
     state = MechanismState(mechanism)
     rand_configuration!(state)
     nv = num_velocities(mechanism)
-    v̇ = [SimpleQP.Variable(i) for i = 1 : nv]
+    v̇ = [Parametron.Variable(i) for i = 1 : nv]
     qpmodel = MockModel()
 
     centroidalframe = CartesianFrame3D("centroidal")

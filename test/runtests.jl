@@ -1,5 +1,9 @@
 module MomentumBasedControlTests
 
+using Compat
+using Compat.Test
+using Compat.LinearAlgebra
+using Compat.Random
 using QPControl
 using RigidBodyDynamics
 using RigidBodyDynamics.Contact
@@ -7,13 +11,11 @@ using ValkyrieRobot.BipedControlUtil
 using ValkyrieRobot
 using StaticArrays
 using Rotations
-using Compat
-using Compat.Test
 using MathOptInterface
 using OSQP.MathOptInterfaceOSQP
-using SimpleQP
+using Parametron
 
-import SimpleQP: MockModel, setdirty!
+import Parametron: MockModel, setdirty!
 
 const QPC = QPControl
 const RBD = RigidBodyDynamics

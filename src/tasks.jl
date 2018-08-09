@@ -28,7 +28,7 @@ function setdesired!(task::SpatialAccelerationTask, desired::SpatialAcceleration
     nothing
 end
 
-function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::SpatialAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     J = Parameter(task.jacobian, qpmodel) do jac
         world_to_desired = inv(transform_to_root(state, task.desired[].frame))
         geometric_jacobian!(jac, state, task.path, world_to_desired)
@@ -70,7 +70,7 @@ function setdesired!(task::AngularAccelerationTask, desired::FreeVector3D)
     nothing
 end
 
-function task_error(task::AngularAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::AngularAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     J = Parameter(task.jacobian, qpmodel) do jac
         world_to_desired = inv(transform_to_root(state, task.desired[].frame))
         geometric_jacobian!(jac, state, task.path, world_to_desired)
@@ -109,7 +109,7 @@ function setdesired!(task::LinearAccelerationTask, desired::FreeVector3D)
     nothing
 end
 
-function task_error(task::LinearAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::LinearAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     J = Parameter(task.jacobian, qpmodel) do jac
         world_to_desired = inv(transform_to_root(state, task.desired[].frame))
         geometric_jacobian!(jac, state, task.path, world_to_desired)
@@ -150,7 +150,7 @@ function setdesired!(task::PointAccelerationTask, desired::FreeVector3D)
     nothing
 end
 
-function task_error(task::PointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::PointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     frame = task.desired[].frame
     state_param = Parameter(identity, state, qpmodel)
     point_in_task_frame = @expression transform(state_param, task.point, frame)
@@ -182,7 +182,7 @@ end
 dimension(task::JointAccelerationTask) = length(task.desired)
 setdesired!(task::JointAccelerationTask, desired) = set_velocity!(task.desired, task.joint, desired)
 
-function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::JointAccelerationTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     desired = Parameter(identity, task.desired, qpmodel)
     v̇joint = v̇[velocity_range(state, task.joint)]
     @expression v̇joint - desired
@@ -227,7 +227,7 @@ function setdesired!(task::MomentumRateTask, desired::Wrench)
     task.desired[] = desired
 end
 
-function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::MomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
     desired = Parameter{Wrench{Float64}}(() -> task.desired[], qpmodel)
     @expression [
@@ -255,7 +255,7 @@ function setdesired!(task::LinearMomentumRateTask, desired::FreeVector3D)
     task.desired[] = desired
 end
 
-function task_error(task::LinearMomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{SimpleQP.Variable})
+function task_error(task::LinearMomentumRateTask, qpmodel, state::MechanismState, v̇::AbstractVector{Parametron.Variable})
     A, Ȧv = momentum_rate_task_params(task, qpmodel, state, v̇)
     desired = Parameter{SVector{3, Float64}}(() -> task.desired[].v, qpmodel)
     @expression linear(A) * v̇ + linear(Ȧv) - desired

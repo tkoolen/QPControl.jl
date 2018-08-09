@@ -1,5 +1,6 @@
 julia 0.6
+Compat 1.0.0 # for Compat.range
 RigidBodyDynamics 0.7.0
-MathOptInterface
-Nullables
-# SimpleQP
+MathOptInterface 0.4
+StaticArrays
+Rotations

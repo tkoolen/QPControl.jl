@@ -15,7 +15,7 @@
     # Make the contact normal a parameter, so that it updates its representation
     # in body frame to match a fixed orientation in world frame
     state = MechanismState(mechanism)
-    model = SimpleQP.Model(defaultoptimizer())
+    model = Parametron.Model(defaultoptimizer())
     position = Point3D(default_frame(body), 0., 0, 0)
     μ = 1.0
     normal = let state = state, body = body
@@ -164,7 +164,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     end
 
     srand(1)
-    for p in linspace(0., 1., 5)
+    for p in Compat.range(0., stop=1., length=5)
         rand!(state)
         com = center_of_mass(state)
         centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
@@ -177,8 +177,8 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
             for contact in controller.contacts[body]
                 active = rand() < p
                 if active
-                    normal = SimpleQP.evalarg(contact.normal)
-                    μ = SimpleQP.evalarg(contact.μ)
+                    normal = Parametron.evalarg(contact.normal)
+                    μ = Parametron.evalarg(contact.μ)
                     contact.weight[] = 1e-6
                     contact.maxnormalforce[] = MAX_NORMAL_FORCE_FIXME
                     fnormal = 50. * rand()
@@ -228,7 +228,7 @@ end
     accels = result.accelerations
     if constrained
         addtask!(controller, task)
-        regularize!.(controller, tree_joints(mechanism), 1.0)
+        regularize!.(Ref(controller), tree_joints(mechanism), 1.0)
     else
         addtask!(controller, task, 1.0)
     end
