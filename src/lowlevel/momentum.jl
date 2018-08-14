@@ -82,6 +82,7 @@ end
 
 function checkstatus(qpmodel::Parametron.Model)
     ok = terminationstatus(qpmodel) == MOI.Success && primalstatus(qpmodel) == MOI.FeasiblePoint
+    ok = ok || (primalstatus(qpmodel) == MOI.FeasiblePoint && dualstatus(qpmodel) == MOI.FeasiblePoint)
     if !ok
         okish = terminationstatus(qpmodel) == MOI.AlmostSuccess && primalstatus(qpmodel) == MOI.UnknownResultStatus
         if !okish
