@@ -66,10 +66,6 @@ function addstages!(c::MPCController, num_stages::Integer, Δt::Real)
     end
 end
 
-function position end
-function wrench_world end
-
-
 function addcontact!(stage::MPCStage{C}, contact::C) where C
     @assert !stage.initialized[]
     push!(stage.contacts, contact)
@@ -167,7 +163,6 @@ function add_contact_indicators!(controller::MPCController, stage::MPCStage, con
     add_contact_indicators!(controller, stage, contact_point, surface, contact_model.boolean_params)
 
     model = controller.qpmodel
-    @assert num_additional_states(controller.state) == 0
     state = Parameter(identity, controller.state, model)
     mechanism = controller.state.mechanism
     position = contact_point.position
@@ -345,7 +340,6 @@ function initialize!(controller::MPCController, stage::MPCStage,
     for contact in stage.contacts
         τ_ext = @expression τ_ext + generalized_torque(state, contact, model)
     end
-
     τ_joint_limit = addjointlimits!(controller, stage)
     @constraint(model, H * (stage.v - v_prev) == Δt * (stage.u + τ_joint_limit - c - τ_ext))
     q̇ = @expression(J_v_to_qdot * stage.v)
@@ -401,9 +395,7 @@ function (controller::MPCController)(τ::AbstractVector, t::Number, x::Mechanism
     end
     @assert controller.initialized[]
 
-    set_configuration!(controller.state, configuration(x))
-    set_velocity!(controller.state, velocity(x))
-    # copyto!(controller.state, x)
+    copyto!(controller.state, x)
     solve!(controller.qpmodel)
     τ .= SimpleQP.value.(controller.qpmodel, first(stages(controller)).u)
     if any(isnan, τ)

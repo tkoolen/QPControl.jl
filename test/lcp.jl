@@ -6,7 +6,8 @@ function add_base_joint!(mechanism, label, direction)
     body = RigidBody(inertia)
     joint = Joint("base_$(label)", Prismatic(direction))
     effort_bounds(joint) .= RigidBodyDynamics.Bounds(0, 0)
-    attach!(mechanism, last(bodies(mechanism)), body, joint)
+    parent = last(bodies(mechanism))
+    attach!(mechanism, parent, body, joint)
 end
 
 function three_dof_point_mass()
@@ -20,7 +21,8 @@ function three_dof_point_mass()
     inertia = SpatialInertia(frame, SDiagonal(0.01, 0.01, 0.01), SVector(0., 0, 0), 1.0)
     body = RigidBody(inertia)
     joint = Joint("core_to_base", Fixed{Float64}())
-    attach!(mechanism, last(bodies(mechanism)), body, joint)
+    parent = last(bodies(mechanism))
+    attach!(mechanism, parent, body, joint)
     mechanism
 end
 
