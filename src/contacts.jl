@@ -38,7 +38,7 @@ struct ContactPoint{N}
     position::Union{Point3D, Parameter{<:Point3D}}
     normal::Union{FreeVector3D, Parameter{<:FreeVector3D}}
     μ::Union{Float64, Parameter{Float64}}
-    toroot::Union{Transform3D, SimpleQP.LazyExpression}
+    toroot::Union{Transform3D, Parametron.LazyExpression}
 
     function ContactPoint{N}(
             position::Union{Point3D, Parameter{<:Point3D}}, normal::Union{FreeVector3D, Parameter{<:FreeVector3D}}, μ::Union{Float64, Parameter{Float64}},

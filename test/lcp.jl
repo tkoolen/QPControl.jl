@@ -64,8 +64,8 @@ function simulate_lcp!(state::MechanismState, mpc::MPCController, t_final=1.0)
         push!(vs, velocity(state))
         mpc(τ, t, state)
         # Assume the dynamics behave exactly as modeled in the optimization
-        set_configuration!(state, SimpleQP.value.(mpc.qpmodel, mpc.stages[1].q))
-        set_velocity!(state, SimpleQP.value.(mpc.qpmodel, mpc.stages[1].v))
+        set_configuration!(state, Parametron.value.(mpc.qpmodel, mpc.stages[1].q))
+        set_velocity!(state, Parametron.value.(mpc.qpmodel, mpc.stages[1].v))
     end
     ts, qs, vs
 end

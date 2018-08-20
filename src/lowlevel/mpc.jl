@@ -15,14 +15,14 @@ struct MPCController{C, O <: MOI.AbstractOptimizer, M <: Mechanism, S <: Mechani
     mechanism::M
     state::S
     dynamicsresult::DynamicsResult{Float64, Float64}
-    qpmodel::SimpleQP.Model{Float64, O}
+    qpmodel::Parametron.Model{Float64, O}
     stages::Vector{MPCStage{C}}
     initialized::Base.RefValue{Bool}
 
     function MPCController{C}(mechanism::Mechanism, optimizer::O) where {C, O <: MOI.AbstractOptimizer}
         state = MechanismState(mechanism)
         dynamicsresult = DynamicsResult(mechanism)
-        qpmodel = SimpleQP.Model(optimizer)
+        qpmodel = Parametron.Model(optimizer)
         stages = Vector{MPCStage{C}}()
         initialized = Ref(false)
         new{C, O, typeof(mechanism), typeof(state)}(mechanism, state, dynamicsresult, qpmodel, stages, initialized)
@@ -397,9 +397,9 @@ function (controller::MPCController)(τ::AbstractVector, t::Number, x::Mechanism
 
     copyto!(controller.state, x)
     solve!(controller.qpmodel)
-    τ .= SimpleQP.value.(controller.qpmodel, first(stages(controller)).u)
+    τ .= Parametron.value.(controller.qpmodel, first(stages(controller)).u)
     if any(isnan, τ)
-        @show SimpleQP.primalstatus(controller.qpmodel)
+        @show Parametron.primalstatus(controller.qpmodel)
         @show t, Vector(x), τ
 
     end
