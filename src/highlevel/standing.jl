@@ -32,10 +32,10 @@ function StandingController(
     worldframe = root_frame(mechanism)
     m = mass(mechanism)
 
-    regularize!.(lowlevel, tree_joints(mechanism), joint_regularization)
+    regularize!.(Ref(lowlevel), tree_joints(mechanism), joint_regularization)
 
     foottasks = Dict(foot => SpatialAccelerationTask(mechanism, path(mechanism, world, foot)) for foot in feet)
-    addtask!.(lowlevel, collect(values(foottasks)))
+    addtask!.(Ref(lowlevel), collect(values(foottasks)))
 
     linmomtask = LinearMomentumRateTask(mechanism, centroidal_frame(lowlevel))
     addtask!(lowlevel, linmomtask, linear_momentum_weight)
@@ -46,7 +46,7 @@ function StandingController(
     revolutejoints = filter(j -> joint_type(j) isa Revolute, tree_joints(mechanism))
     positioncontroljoints = setdiff(revolutejoints, vcat((collect(task.path) for task in values(foottasks))...))
     jointtasks = Dict(JointID(j) => JointAccelerationTask(j) for j in positioncontroljoints)
-    addtask!.(lowlevel, collect(values(jointtasks)))
+    addtask!.(Ref(lowlevel), collect(values(jointtasks)))
 
     StandingController(
         lowlevel, m,

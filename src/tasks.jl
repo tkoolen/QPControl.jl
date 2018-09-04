@@ -122,6 +122,10 @@ function task_error(task::LinearAccelerationTask, qpmodel, state::MechanismState
     @expression linear(J) * v̇ + linear(J̇v) - desired
 end
 
+if VERSION < v"0.7-"
+    RigidBodyDynamics.PointJacobian(frame::CartesianFrame3D, mat::AbstractMatrix) = PointJacobian(mat, frame)
+end
+
 struct PointAccelerationTask <: AbstractMotionTask
     path::TreePath{RigidBody{Float64}, Joint{Float64}}
     jacobian::PointJacobian{Matrix{Float64}}
@@ -136,7 +140,7 @@ struct PointAccelerationTask <: AbstractMotionTask
         bodyframe = default_frame(target(path))
         baseframe = default_frame(source(path))
         @framecheck point.frame bodyframe
-        jacobian = PointJacobian(zeros(3, nv), baseframe)
+        jacobian = PointJacobian(baseframe, zeros(3, nv))
         desired = Ref(FreeVector3D(baseframe, 0.0, 0.0, 0.0))
         new(path, jacobian, point, desired)
     end

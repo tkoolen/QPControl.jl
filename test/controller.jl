@@ -45,7 +45,7 @@
 end
 
 @testset "fixed base joint space control, constrained = $constrained" for constrained in [true, false]
-    srand(42)
+    seed!(42)
     mechanism = rand_tree_mechanism(Float64, Prismatic{Float64}, Revolute{Float64}, Revolute{Float64})
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
@@ -114,7 +114,7 @@ end
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 
-    srand(5354)
+    seed!(5354)
     zero!(state)
     rand_configuration!(state)
     for joint in tree_joints(mechanism)
@@ -163,7 +163,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
         regularize!(controller, joint, 1e-6)
     end
 
-    srand(1)
+    seed!(1)
     for p in Compat.range(0., stop=1., length=5)
         rand!(state)
         com = center_of_mass(state)
@@ -215,7 +215,7 @@ end
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 
-    srand(533)
+    seed!(533)
     rand!(state)
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer(), floatingjoint=floatingjoint)

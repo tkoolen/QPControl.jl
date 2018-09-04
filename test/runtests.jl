@@ -21,6 +21,12 @@ const QPC = QPControl
 const RBD = RigidBodyDynamics
 const MOI = MathOptInterface
 
+if VERSION < v"0.7-"
+    const seed! = srand
+else
+    import Random: seed!
+end
+
 macro test_noalloc(expr)
     quote
         let
