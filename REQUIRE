@@ -4,3 +4,4 @@ RigidBodyDynamics 0.7.0
 MathOptInterface 0.4
 StaticArrays
 Rotations
+Parametron 0.2.0
