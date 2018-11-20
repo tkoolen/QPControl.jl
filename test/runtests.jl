@@ -1,4 +1,4 @@
-module MomentumBasedControlTests
+module QPControlTests
 
 using Test
 using LinearAlgebra
@@ -15,7 +15,7 @@ using OSQP
 using OSQP.MathOptInterfaceOSQP: OSQPSettings
 using Parametron
 
-import Parametron: MockModel, setdirty!
+import Parametron: mock_model, setdirty!
 
 const QPC = QPControl
 const RBD = RigidBodyDynamics
