@@ -1,9 +1,8 @@
 module MomentumBasedControlTests
 
-using Compat
-using Compat.Test
-using Compat.LinearAlgebra
-using Compat.Random
+using Test
+using LinearAlgebra
+using Random
 using QPControl
 using RigidBodyDynamics
 using RigidBodyDynamics.Contact
@@ -20,12 +19,6 @@ import Parametron: MockModel, setdirty!
 const QPC = QPControl
 const RBD = RigidBodyDynamics
 const MOI = MathOptInterface
-
-if VERSION < v"0.7-"
-    const seed! = srand
-else
-    import Random: seed!
-end
 
 macro test_noalloc(expr)
     quote

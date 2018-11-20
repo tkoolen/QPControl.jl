@@ -30,7 +30,7 @@
     # Constrain the contact force to be non-zero for testing
     @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
 
-    for θ in Compat.range(-π, stop=π, length=10)
+    for θ in range(-π, stop=π, length=10)
         set_configuration!(state, [θ])
         solve!(model)
         # Sanity check our constraint
@@ -164,7 +164,7 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     end
 
     seed!(1)
-    for p in Compat.range(0., stop=1., length=5)
+    for p in range(0., stop=1., length=5)
         rand!(state)
         com = center_of_mass(state)
         centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
