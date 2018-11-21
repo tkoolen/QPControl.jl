@@ -31,8 +31,7 @@ export
 export
     StandingController
 
-using Compat
-using Compat.LinearAlgebra
+using LinearAlgebra
 using RigidBodyDynamics
 using RigidBodyDynamics.Graphs
 using RigidBodyDynamics.Contact

@@ -4,7 +4,7 @@ os:
   - linux
   - osx
 julia:
-  - 0.6
+  - 0.7
   - 1.0
   - nightly
 matrix:
@@ -13,9 +13,8 @@ matrix:
 branches:
   only:
     - master
-    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
+    - /^v\d+\.\d+(\.\d+)?(-\S*)?$/ # version tags
 notifications:
   email: false
 after_success:
-  # push coverage results to Codecov
-  - julia -e 'if VERSION >= v"0.7-"; using Pkg; else; cd(Pkg.dir("QPControl")); end; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
+  - julia -e 'using Pkg; pkg"add Coverage@0.6.0"; using Coverage; Codecov.submit(process_folder())'

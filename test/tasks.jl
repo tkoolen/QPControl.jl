@@ -5,7 +5,7 @@
     nv = num_velocities(mechanism)
     v̇ = [Parametron.Variable(i) for i = 1 : nv]
     v̇vals = rand!(similar(velocity(state)))
-    qpmodel = MockModel()
+    qpmodel = mock_model()
     tasks = Dict{Joint{Float64, Revolute{Float64}}, JointAccelerationTask{Revolute{Float64}}}()
     for joint in tree_joints(mechanism)
         task = JointAccelerationTask(joint)
@@ -27,7 +27,7 @@ end
     rand_configuration!(state)
     nv = num_velocities(mechanism)
     v̇ = [Parametron.Variable(i) for i = 1 : nv]
-    qpmodel = MockModel()
+    qpmodel = mock_model()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
         body = rand(setdiff(bodies(mechanism), [base]))
@@ -71,7 +71,7 @@ end
     rand_configuration!(state)
     nv = num_velocities(mechanism)
     v̇ = [Parametron.Variable(i) for i = 1 : nv]
-    qpmodel = MockModel()
+    qpmodel = mock_model()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
         body = rand(setdiff(bodies(mechanism), [base]))
@@ -126,7 +126,7 @@ end
     rand_configuration!(state)
     nv = num_velocities(mechanism)
     v̇ = [Parametron.Variable(i) for i = 1 : nv]
-    qpmodel = MockModel()
+    qpmodel = mock_model()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
         body = rand(setdiff(bodies(mechanism), [base]))
@@ -170,7 +170,7 @@ end
     rand_configuration!(state)
     nv = num_velocities(mechanism)
     v̇ = [Parametron.Variable(i) for i = 1 : nv]
-    qpmodel = MockModel()
+    qpmodel = mock_model()
     for testnum = 1 : 10
         base = rand(bodies(mechanism))
         body = rand(setdiff(bodies(mechanism), [base]))
@@ -187,7 +187,7 @@ end
         zero_velocity!(state)
         v̇0 = zeros(length(v̇))
         setdirty!(qpmodel)
-        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(desired)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -SVector(desired)
 
         QPC.setdesired!(task, zero(desired))
         setdirty!(qpmodel)
@@ -195,12 +195,12 @@ end
         rand_velocity!(state)
         biasaccel = transform(state, -RBD.bias_acceleration(state, base) + RBD.bias_acceleration(state, body), bodyframe)
         setdirty!(qpmodel)
-        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(biasaccel)
+        @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == SVector(biasaccel)
 
         zero_velocity!(state)
         setdirty!(qpmodel)
         v̇rand = rand(nv)
-        expected = Array(transform(state, SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe))
+        expected = SVector(transform(state, SpatialAcceleration(geometric_jacobian(state, p), v̇rand), bodyframe))
         @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ expected atol = 1e-12
 
         allocs = @allocated err()
@@ -214,7 +214,7 @@ end
     rand_configuration!(state)
     nv = num_velocities(mechanism)
     v̇ = [Parametron.Variable(i) for i = 1 : nv]
-    qpmodel = MockModel()
+    qpmodel = mock_model()
 
     centroidalframe = CartesianFrame3D("centroidal")
     task = MomentumRateTask(mechanism, centroidalframe)
@@ -227,20 +227,20 @@ end
     zero_velocity!(state)
     setdirty!(qpmodel)
     v̇0 = zeros(length(v̇))
-    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -Array(desired)
+    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == -SVector(desired)
 
     QPC.setdesired!(task, zero(desired))
     rand_velocity!(state)
     setdirty!(qpmodel)
     world_to_centroidal = Transform3D(root_frame(mechanism), centroidalframe, -center_of_mass(state).v)
     Ȧv = transform(momentum_rate_bias(state), world_to_centroidal)
-    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == Array(Ȧv)
+    @test map(f -> f(Dict(zip(v̇, v̇0))), err()) == SVector(Ȧv)
 
     zero_velocity!(state)
     setdirty!(qpmodel)
     v̇rand = rand(nv)
     expected = transform(Wrench(momentum_matrix(state), v̇rand), world_to_centroidal)
-    @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ Array(expected) atol = 1e-12
+    @test map(f -> f(Dict(zip(v̇, v̇rand))), err()) ≈ SVector(expected) atol = 1e-12
 
     allocs = @allocated err()
     @test allocs == 0

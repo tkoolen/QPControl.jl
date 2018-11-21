@@ -1,9 +1,8 @@
-module MomentumBasedControlTests
+module QPControlTests
 
-using Compat
-using Compat.Test
-using Compat.LinearAlgebra
-using Compat.Random
+using Test
+using LinearAlgebra
+using Random
 using QPControl
 using RigidBodyDynamics
 using RigidBodyDynamics.Contact
@@ -12,20 +11,15 @@ using ValkyrieRobot
 using StaticArrays
 using Rotations
 using MathOptInterface
-using OSQP.MathOptInterfaceOSQP
+using OSQP
+using OSQP.MathOptInterfaceOSQP: OSQPSettings
 using Parametron
 
-import Parametron: MockModel, setdirty!
+import Parametron: mock_model, setdirty!
 
 const QPC = QPControl
 const RBD = RigidBodyDynamics
 const MOI = MathOptInterface
-
-if VERSION < v"0.7-"
-    const seed! = srand
-else
-    import Random: seed!
-end
 
 macro test_noalloc(expr)
     quote
@@ -38,12 +32,12 @@ macro test_noalloc(expr)
 end
 
 function defaultoptimizer()
-    optimizer = OSQPOptimizer()
-    MOI.set!(optimizer, OSQPSettings.Verbose(), false)
-    MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
-    MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
-    MOI.set!(optimizer, OSQPSettings.MaxIter(), 10000)
-    MOI.set!(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
+    optimizer = OSQP.Optimizer()
+    MOI.set(optimizer, OSQPSettings.Verbose(), false)
+    MOI.set(optimizer, OSQPSettings.EpsAbs(), 1e-8)
+    MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
+    MOI.set(optimizer, OSQPSettings.MaxIter(), 10000)
+    MOI.set(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
     optimizer
 end
 

@@ -1,7 +1,6 @@
-julia 0.6
-Compat 1.0.0 # for Compat.range
+julia 0.7
 RigidBodyDynamics 0.7.0
-MathOptInterface 0.4
+MathOptInterface 0.6 0.7
 StaticArrays
 Rotations
 Parametron 0.2.0

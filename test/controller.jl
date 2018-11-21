@@ -30,7 +30,7 @@
     # Constrain the contact force to be non-zero for testing
     @constraint(model, controller_contact.force_local.v == [0.0, 0.0, 1.0])
 
-    for θ in Compat.range(-π, stop=π, length=10)
+    for θ in range(-π, stop=π, length=10)
         set_configuration!(state, [θ])
         solve!(model)
         # Sanity check our constraint
@@ -45,7 +45,7 @@
 end
 
 @testset "fixed base joint space control, constrained = $constrained" for constrained in [true, false]
-    seed!(42)
+    Random.seed!(42)
     mechanism = rand_tree_mechanism(Float64, Prismatic{Float64}, Revolute{Float64}, Revolute{Float64})
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer())
@@ -114,7 +114,7 @@ end
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 
-    seed!(5354)
+    Random.seed!(5354)
     zero!(state)
     rand_configuration!(state)
     for joint in tree_joints(mechanism)
@@ -163,8 +163,8 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
         regularize!(controller, joint, 1e-6)
     end
 
-    seed!(1)
-    for p in Compat.range(0., stop=1., length=5)
+    Random.seed!(1)
+    for p in range(0., stop=1., length=5)
         rand!(state)
         com = center_of_mass(state)
         centroidal_to_world = Transform3D(centroidal_frame(controller), com.frame, com.v)
@@ -215,7 +215,7 @@ end
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 
-    seed!(533)
+    Random.seed!(533)
     rand!(state)
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer(), floatingjoint=floatingjoint)
