@@ -14,6 +14,7 @@ using MathOptInterface
 using OSQP
 using OSQP.MathOptInterfaceOSQP: OSQPSettings
 using Parametron
+using StaticUnivariatePolynomials
 
 import Parametron: mock_model, setdirty!
 
@@ -41,8 +42,9 @@ function defaultoptimizer()
     optimizer
 end
 
-include("tasks.jl")
-include("notebooks.jl")
-include("controller.jl")
+# include("tasks.jl")
+# include("notebooks.jl")
+# include("controller.jl")
+include("trajectories.jl")
 
 end # module
