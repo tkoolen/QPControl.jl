@@ -27,7 +27,7 @@ const SUP = StaticUnivariatePolynomials
         pd = SUP.derivative(p)
         pdd = SUP.derivative(pd)
 
-        atol = 1e-8
+        atol = 1e-6
         @test p(x0) ≈ y0 atol=atol
         @test pd(x0) ≈ yd0 atol=atol
         @test pdd(x0) ≈ ydd0 atol=atol
@@ -37,7 +37,7 @@ const SUP = StaticUnivariatePolynomials
     end
 end
 
-@testset "InterpolationTrajectory" begin
+@testset "InterpolationTrajectory, identity interpolator function" begin
     let y0 = 1, yf = 2
         traj = InterpolationTrajectory(0.0, 1.0, y0, yf)
 
