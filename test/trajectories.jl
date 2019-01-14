@@ -8,6 +8,7 @@ using Rotations
 using RigidBodyDynamics
 using StaticArrays
 using StaticUnivariatePolynomials
+using ForwardDiff
 
 const SUP = StaticUnivariatePolynomials
 
@@ -72,6 +73,33 @@ end
         @test normalize(yd) ≈ axis atol=1e-15
         @test norm(yd) ≈ abs(angle) atol=1e-15
         @test ydd ≈ SVector(0.0, 0.0, 0.0) atol=1e-15
+    end
+end
+
+@testset "InterpolationTrajectory, polynomial interpolator function" begin
+    interpolator = fit_quintic(x0=0.0, xf=1.0, y0=0.0, yd0=0.0, ydd0=0.0, yf=1.0, ydf=0.0, yddf=0.0)
+    x0 = -1.0
+    xf = 2.0
+    y0 = 2.0
+    yf = 3.0
+    traj = InterpolationTrajectory(x0, xf, y0, yf, interpolator, min_num_derivs=Val(2))
+
+    y, yd, ydd = traj(x0, Val(2))
+    @test y ≈ y0 atol=1e-10
+    @test yd ≈ 0.0 atol=1e-10
+    @test ydd ≈ 0.0 atol=1e-10
+
+    y, yd, ydd = traj(xf, Val(2))
+    @test y ≈ yf atol=1e-10
+    @test yd ≈ 0.0 atol=1e-10
+    @test ydd ≈ 0.0 atol=1e-10
+
+    for x in range(x0; stop=xf, length=10)
+        _, yd, ydd = traj(x, Val(2))
+        yd_forward = ForwardDiff.derivative(traj, x)
+        ydd_forward = ForwardDiff.derivative(x -> ForwardDiff.derivative(traj, x), x)
+        @test yd ≈ yd_forward atol=1e-4
+        @test ydd ≈ ydd_forward atol=1e-4
     end
 end
 
