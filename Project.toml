@@ -9,7 +9,7 @@ Parametron = "41fac6d6-0ffa-5bcc-b863-17dd4947be41"
 RigidBodyDynamics = "366cf18f-59d5-5db9-a4de-86a9f6786172"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
-StaticUnivariatePolynomials = "acf665a8-1387-11e9-3699-7f83672d90f1"
+StaticUnivariatePolynomials = "6f584044-cad5-5b68-a429-1e244a824f76"
 
 [compat]
 MathOptInterface = "~0.6"

@@ -1,3 +1,13 @@
+module TrajectoriesTest
+
+using QPControl.Trajectories
+using Test
+using LinearAlgebra
+using Random
+using Rotations
+using RigidBodyDynamics
+using StaticArrays
+
 @testset "InterpolationTrajectory" begin
     let y0 = 1, yf = 2
         traj = InterpolationTrajectory(0.0, 1.0, y0, yf)
@@ -34,4 +44,6 @@
         @test norm(yd) ≈ abs(angle) atol=1e-15
         @test ydd ≈ SVector(0.0, 0.0, 0.0) atol=1e-15
     end
+end
+
 end
