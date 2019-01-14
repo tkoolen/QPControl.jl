@@ -7,6 +7,35 @@ using Random
 using Rotations
 using RigidBodyDynamics
 using StaticArrays
+using StaticUnivariatePolynomials
+
+const SUP = StaticUnivariatePolynomials
+
+@testset "fit_quintic" begin
+    rng = MersenneTwister()
+    for i = 1 : 10
+        x0 = rand(rng)
+        xf = rand(rng)
+        y0 = rand(rng)
+        yd0 = rand(rng)
+        ydd0 = rand(rng)
+        yf = rand(rng)
+        ydf = rand(rng)
+        yddf = rand(rng)
+
+        p = fit_quintic(x0=x0, xf=xf, y0=y0, yd0=yd0, ydd0=ydd0, yf=yf, ydf=ydf, yddf=yddf)
+        pd = SUP.derivative(p)
+        pdd = SUP.derivative(pd)
+
+        atol = 1e-8
+        @test p(x0) ≈ y0 atol=atol
+        @test pd(x0) ≈ yd0 atol=atol
+        @test pdd(x0) ≈ ydd0 atol=atol
+        @test p(xf) ≈ yf atol=atol
+        @test pd(xf) ≈ ydf atol=atol
+        @test pdd(xf) ≈ yddf atol=atol
+    end
+end
 
 @testset "InterpolationTrajectory" begin
     let y0 = 1, yf = 2

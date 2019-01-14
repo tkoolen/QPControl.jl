@@ -153,9 +153,10 @@ uuid = "90137ffa-7385-5640-81b9-e52037218182"
 version = "0.10.2"
 
 [[StaticUnivariatePolynomials]]
-deps = ["Test"]
-git-tree-sha1 = "1b4339e7e32c6f6f1677d26cf3515b702ef475b5"
-uuid = "6f584044-cad5-5b68-a429-1e244a824f76"
+git-tree-sha1 = "fb90cd24d9e43c1fc32d86ffe16f85ed6de7b4d2"
+repo-rev = "master"
+repo-url = "https://github.com/tkoolen/StaticUnivariatePolynomials.jl.git"
+uuid = "acf665a8-1387-11e9-3699-7f83672d90f1"
 version = "0.1.0"
 
 [[Statistics]]
