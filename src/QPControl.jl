@@ -50,5 +50,6 @@ include("tasks.jl")
 include("exceptions.jl")
 include("lowlevel/momentum.jl")
 include("highlevel/standing.jl")
+include("trajectories/trajectories.jl")
 
 end # module

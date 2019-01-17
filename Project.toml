@@ -9,6 +9,7 @@ Parametron = "41fac6d6-0ffa-5bcc-b863-17dd4947be41"
 RigidBodyDynamics = "366cf18f-59d5-5db9-a4de-86a9f6786172"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+StaticUnivariatePolynomials = "acf665a8-1387-11e9-3699-7f83672d90f1"
 
 [compat]
 MathOptInterface = "~0.6"
@@ -16,6 +17,7 @@ MathOptInterface = "~0.6"
 [extras]
 AtlasRobot = "436ed74b-f7b6-57fe-bd82-efdbd6c0ab0c"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 MeshCatMechanisms = "6ad125db-dd91-5488-b820-c1df6aab299d"
 NBInclude = "0db19996-df87-5ea3-a455-e3a50d440464"
 OSQP = "ab2f91bb-94b4-55e3-9ba0-7f65df51de79"
@@ -25,4 +27,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ValkyrieRobot = "c74b26e8-f247-5d24-b013-c11a2bbd97c6"
 
 [targets]
-test = ["Test", "AtlasRobot", "BenchmarkTools", "MeshCatMechanisms", "NBInclude", "OSQP", "Random", "RigidBodySim", "Test", "ValkyrieRobot"]
+test = ["AtlasRobot", "BenchmarkTools", "MeshCatMechanisms", "NBInclude", "OSQP", "Random", "RigidBodySim", "Test", "ValkyrieRobot", "ForwardDiff"]
