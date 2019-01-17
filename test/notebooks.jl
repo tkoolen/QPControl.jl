@@ -8,6 +8,7 @@
         lowercase(ext) == ".ipynb" || continue
 
         @eval module $(gensym()) # Each notebook is run in its own module.
+        println("Running $($name).")
         using Test
         using NBInclude
         @testset "$($name)" begin

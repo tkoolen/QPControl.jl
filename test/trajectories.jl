@@ -13,7 +13,7 @@ using ForwardDiff
 const SUP = StaticUnivariatePolynomials
 
 @testset "fit_quintic" begin
-    rng = MersenneTwister()
+    rng = MersenneTwister(15)
     for i = 1 : 10
         x0 = rand(rng)
         xf = rand(rng)

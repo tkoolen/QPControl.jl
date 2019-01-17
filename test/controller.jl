@@ -105,6 +105,7 @@ function set_up_valkyrie_contacts!(controller::MomentumBasedController; parametr
 end
 
 @testset "zero velocity free fall" begin
+    Random.seed!(5354)
     val = Valkyrie()
     mechanism = val.mechanism
     floatingjoint = val.basejoint
@@ -114,7 +115,6 @@ end
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 
-    Random.seed!(5354)
     zero!(state)
     rand_configuration!(state)
     for joint in tree_joints(mechanism)
@@ -146,6 +146,7 @@ end
 const MAX_NORMAL_FORCE_FIXME = 1e9
 
 @testset "achievable momentum rate" begin
+    Random.seed!(533454)
     val = Valkyrie()
     mechanism = val.mechanism
     floatingjoint = val.basejoint
@@ -163,7 +164,6 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
         regularize!(controller, joint, 1e-6)
     end
 
-    Random.seed!(1)
     for p in range(0., stop=1., length=5)
         rand!(state)
         com = center_of_mass(state)
@@ -209,13 +209,13 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
 end
 
 @testset "spatial acceleration, constrained = $constrained" for constrained in [true, false]
+    Random.seed!(533)
     val = Valkyrie()
     mechanism = val.mechanism
     floatingjoint = val.basejoint
     state = MechanismState(mechanism)
     τ = similar(velocity(state))
 
-    Random.seed!(533)
     rand!(state)
     N = 4
     controller = MomentumBasedController{N}(mechanism, defaultoptimizer(), floatingjoint=floatingjoint)

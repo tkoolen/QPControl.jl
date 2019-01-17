@@ -1,4 +1,5 @@
 @testset "JointAccelerationTask" begin
+    Random.seed!(1)
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand!(state)
@@ -22,6 +23,7 @@
 end
 
 @testset "AngularAccelerationTask" begin
+    Random.seed!(2)
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
@@ -66,6 +68,7 @@ end
 end
 
 @testset "PointAccelerationTask" begin
+    Random.seed!(3)
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
@@ -121,6 +124,7 @@ end
 
 
 @testset "LinearAccelerationTask" begin
+    Random.seed!(4)
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
@@ -165,6 +169,7 @@ end
 end
 
 @testset "SpatialAccelerationTask" begin
+    Random.seed!(5)
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
@@ -209,6 +214,7 @@ end
 end
 
 @testset "MomentumRateTask" begin
+    Random.seed!(6)
     mechanism = RBD.rand_tree_mechanism(Float64, [Revolute{Float64} for _ = 1 : 10]...)
     state = MechanismState(mechanism)
     rand_configuration!(state)
