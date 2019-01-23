@@ -12,6 +12,30 @@ using ForwardDiff
 
 const SUP = StaticUnivariatePolynomials
 
+@testset "fit_cubic" begin
+    rng = MersenneTwister(15)
+    for i = 1 : 10
+        x0 = rand(rng)
+        xf = rand(rng)
+        y0 = rand(rng)
+        yd0 = rand(rng)
+        yf = rand(rng)
+        ydf = rand(rng)
+
+        p = fit_cubic(x0=x0, xf=xf, y0=y0, yd0=yd0, yf=yf, ydf=ydf)
+        pd = SUP.derivative(p)
+        pdd = SUP.derivative(pd)
+
+        atol = 1e-6
+        @test p(x0) ≈ y0 atol=atol
+        @test pd(x0) ≈ yd0 atol=atol
+        @test p(xf) ≈ yf atol=atol
+        @test pd(xf) ≈ ydf atol=atol
+
+        @test length(p.coeffs) == 4
+    end
+end
+
 @testset "fit_quintic" begin
     rng = MersenneTwister(15)
     for i = 1 : 10
@@ -35,6 +59,8 @@ const SUP = StaticUnivariatePolynomials
         @test p(xf) ≈ yf atol=atol
         @test pd(xf) ≈ ydf atol=atol
         @test pdd(xf) ≈ yddf atol=atol
+
+        @test length(p.coeffs) == 6
     end
 end
 
