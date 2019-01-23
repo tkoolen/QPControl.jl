@@ -1,6 +1,7 @@
 module Trajectories
 
 export
+    fit_cubic,
     fit_quintic,
     InterpolationTrajectory
 
