@@ -1,24 +1,29 @@
-struct InterpolationTrajectory{X, Y, I}
+struct Interpolated{X, Y, I}
     x0::X
     xf::X
     y0::Y
     yf::Y
     interpolator::I
+    clamp::Bool
 
-    function InterpolationTrajectory(x0::X, xf::X, y0::Y, yf::Y, f=identity; min_num_derivs=Val(0)) where {X, Y}
+    function Interpolated(x0::X, xf::X, y0::Y, yf::Y, f=identity; min_num_derivs=Val(0), clamp::Bool=true) where {X, Y}
         interpolator = make_interpolator(f, min_num_derivs)
-        new{X, Y, typeof(interpolator)}(x0, xf, y0, yf, interpolator)
+        new{X, Y, typeof(interpolator)}(x0, xf, y0, yf, interpolator, clamp)
     end
 end
 
-function InterpolationTrajectory(x0, xf, y0, yf, f=identity; min_num_derivs=Val(0))
-    InterpolationTrajectory(promote(x0, xf)..., promote(y0, yf)..., f, min_num_derivs=min_num_derivs)
+function Interpolated(x0, xf, y0, yf, f=identity; min_num_derivs=Val(0))
+    Interpolated(promote(x0, xf)..., promote(y0, yf)..., f, min_num_derivs=min_num_derivs)
 end
 
 # Call overload with derivatives
-function (trajectory::InterpolationTrajectory)(x, ::Val{num_derivs}) where num_derivs
-    # 1. Compute θ(x) = clamp((x - x0) / (xf - x0), 0, 1) and dθ/dx.
+function (trajectory::Interpolated)(x, ::Val{num_derivs}) where num_derivs
     x0, xf = trajectory.x0, trajectory.xf
+    if !trajectory.clamp && (x < x0 || x > xf)
+        throw_trajectory_domain_error(x, x0, xf)
+    end
+
+    # 1. Compute θ(x) = clamp((x - x0) / (xf - x0), 0, 1) and dθ/dx.
     Δx = xf - x0
     θ = (x - x0) / Δx
     if θ <= x0
@@ -50,7 +55,7 @@ function (trajectory::InterpolationTrajectory)(x, ::Val{num_derivs}) where num_d
 end
 
 # Single-argument call overload just returns the value:
-(trajectory::InterpolationTrajectory)(x) = trajectory(x, Val(0))[1]
+(trajectory::Interpolated)(x) = trajectory(x, Val(0))[1]
 
 # Interpolation
 function interpolate(y0, yf, α)

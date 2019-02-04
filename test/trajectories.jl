@@ -64,9 +64,9 @@ end
     end
 end
 
-@testset "InterpolationTrajectory, identity interpolator function" begin
+@testset "Interpolated, identity interpolator function" begin
     let y0 = 1, yf = 2
-        traj = InterpolationTrajectory(0.0, 1.0, y0, yf)
+        traj = Interpolated(0.0, 1.0, y0, yf)
 
         y = traj(0.5)
         @test y === 1.5
@@ -78,7 +78,7 @@ end
     end
 
     let f = CartesianFrame3D(), y0 = Point3D(f, 1, 2, 3), yf = Point3D(f, 0, 2, 4)
-        traj = InterpolationTrajectory(0.0, 1.0, y0, yf)
+        traj = Interpolated(0.0, 1.0, y0, yf)
         y, yd, ydd = traj(0.5, Val(2))
         @test y ≈ Point3D(f, 0.5, 2.0, 3.5) atol=1e-15
         @test yd ≈ FreeVector3D(f, -1.0, 0.0, 1.0) atol=1e-15
@@ -86,7 +86,7 @@ end
     end
 
     let angle = π / 2, axis = SVector(1.0, 0.0, 0.0), y0 = one(Quat), yf = Quat(AngleAxis(angle, axis...))
-        traj = InterpolationTrajectory(0.0, 1.0, y0, yf)
+        traj = Interpolated(0.0, 1.0, y0, yf)
 
         y = traj(0.0)
         @test y ≈ y0 atol=1e-15
@@ -102,13 +102,13 @@ end
     end
 end
 
-@testset "InterpolationTrajectory, polynomial interpolator function" begin
+@testset "Interpolated, polynomial interpolator function" begin
     interpolator = fit_quintic(x0=0.0, xf=1.0, y0=0.0, yd0=0.0, ydd0=0.0, yf=1.0, ydf=0.0, yddf=0.0)
     x0 = -1.0
     xf = 2.0
     y0 = 2.0
     yf = 3.0
-    traj = InterpolationTrajectory(x0, xf, y0, yf, interpolator, min_num_derivs=Val(2))
+    traj = Interpolated(x0, xf, y0, yf, interpolator, min_num_derivs=Val(2))
 
     y, yd, ydd = traj(x0, Val(2))
     @test y ≈ y0 atol=1e-10
@@ -127,6 +127,48 @@ end
         @test yd ≈ yd_forward atol=1e-4
         @test ydd ≈ ydd_forward atol=1e-4
     end
+end
+
+function test_piecewise(traj::Piecewise)
+    n = length(traj.subtrajectories)
+    for (i, t) in enumerate(traj.knots)
+        subtraj = traj.subtrajectories[min(i, n)]
+        @test traj(t) == subtraj(t - traj.knots[min(i, n)])
+        if i < n
+            tnext = traj.knots[i + 1]
+            tmid = (t + tnext) / 2
+            @test traj(tmid) == subtraj(tmid - t)
+            @test traj(tmid, Val(2)) == subtraj(tmid - t, Val(2))
+        end
+    end
+    t0 = first(traj.knots)
+    tf = last(traj.knots)
+    if traj.clamp
+        @test traj(t0 - 1) == traj(t0)
+        @test traj(tf + 1) == traj(tf)
+    else
+        @test_throws DomainError traj(t0 - 1)
+        @test_throws DomainError traj(tf + 1)
+    end
+end
+
+@testset "Piecewise constant" begin
+    n = 5
+    subtrajectories = [Constant(i) for i = 1 : n]
+    knots = [i^2 - 1 for i = 1 : n + 1]
+    test_piecewise(Piecewise(subtrajectories, knots; clamp=true))
+    test_piecewise(Piecewise(subtrajectories, knots; clamp=false))
+end
+
+@testset "Piecewise interpolated" begin
+    rng = MersenneTwister(1)
+    n = 5
+    knots = [i^2 - 1 for i = 1 : n + 1]
+    subtrajectories = map(diff(knots)) do Δt
+        Interpolated(0.0, Float64(Δt), rand(rng), rand(rng))
+    end
+    test_piecewise(Piecewise(subtrajectories, knots; clamp=true))
+    test_piecewise(Piecewise(subtrajectories, knots; clamp=false))
 end
 
 end
