@@ -21,10 +21,11 @@ ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 MeshCatMechanisms = "6ad125db-dd91-5488-b820-c1df6aab299d"
 NBInclude = "0db19996-df87-5ea3-a455-e3a50d440464"
 OSQP = "ab2f91bb-94b4-55e3-9ba0-7f65df51de79"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 RigidBodySim = "e61f16d8-a6b7-5689-8d03-627c2b27ebce"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ValkyrieRobot = "c74b26e8-f247-5d24-b013-c11a2bbd97c6"
 
 [targets]
-test = ["AtlasRobot", "BenchmarkTools", "MeshCatMechanisms", "NBInclude", "OSQP", "Random", "RigidBodySim", "Test", "ValkyrieRobot", "ForwardDiff"]
+test = ["AtlasRobot", "BenchmarkTools", "MeshCatMechanisms", "NBInclude", "OSQP", "Random", "RigidBodySim", "Test", "ValkyrieRobot", "ForwardDiff", "Pkg"]
