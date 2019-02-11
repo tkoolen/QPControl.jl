@@ -26,10 +26,10 @@ function (trajectory::Interpolated)(x, ::Val{num_derivs}) where num_derivs
     # 1. Compute θ(x) = clamp((x - x0) / (xf - x0), 0, 1) and dθ/dx.
     Δx = xf - x0
     θ = (x - x0) / Δx
-    if θ <= x0
+    if θ <= zero(θ)
         θ = zero(θ)
         dθdx = zero(θ)
-    elseif θ >= xf
+    elseif θ >= one(θ)
         θ = one(θ)
         dθdx = zero(θ)
     else
