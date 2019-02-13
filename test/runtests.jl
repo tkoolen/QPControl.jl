@@ -42,9 +42,9 @@ function defaultoptimizer()
     optimizer
 end
 
+include("trajectories.jl")
 include("tasks.jl")
 include("controller.jl")
-include("trajectories.jl")
 include("notebooks.jl")
 
 end # module
