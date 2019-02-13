@@ -5,11 +5,15 @@ export
     fit_quintic,
     Constant,
     Interpolated,
-    Piecewise
+    Piecewise,
+    BezierCurve
 
 using StaticUnivariatePolynomials
 using StaticArrays
 using Rotations
+
+using Base: tail
+using StaticUnivariatePolynomials: constant, derivative
 
 const SUP = StaticUnivariatePolynomials
 
@@ -23,5 +27,6 @@ include("fit_polynomial.jl")
 include("constant.jl")
 include("interpolated.jl")
 include("piecewise.jl")
+include("bezier.jl")
 
 end

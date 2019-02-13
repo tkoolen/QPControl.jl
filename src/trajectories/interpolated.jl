@@ -82,8 +82,8 @@ end
 # function returned by `make_interpolator` has signature (θ, n) -> (f(θ), (f′(θ), ...,f^{(n)}(θ)))
 function make_interpolator(f, ::Val)
     function (θ, ::Val{num_derivs}) where {num_derivs}
-        # Default to calling the `derivative` function
-        f(θ), ntuple(i -> derivative(f, θ, i), Val(num_derivs))
+        # Default to calling the `nthderiv` function
+        f(θ), ntuple(n -> nthderiv(f, θ, n), Val(num_derivs))
     end
 end
 
@@ -111,5 +111,5 @@ function (interp::PolynomialInterpolator)(θ, ::Val{num_derivs}) where num_deriv
     interp.f(θ), ntuple(i -> interp.derivs[i](θ), Val(num_derivs))
 end
 
-# `derivative` overloads
-derivative(::typeof(identity), θ, i::Int) = i === 1 ? one(θ) : zero(θ)
+# `nthderiv` overloads
+nthderiv(::typeof(identity), θ, n::Int) = n === 1 ? one(θ) : zero(θ)
