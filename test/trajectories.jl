@@ -10,7 +10,7 @@ using StaticArrays
 using StaticUnivariatePolynomials
 using ForwardDiff
 
-using QPControl.Trajectories: exponential_integral
+using QPControl.Trajectories: exponential_integral, subfunctions, breaks
 
 const SUP = StaticUnivariatePolynomials
 
@@ -132,19 +132,19 @@ end
 end
 
 function test_piecewise(traj::Piecewise)
-    n = length(traj.subtrajectories)
-    for (i, t) in enumerate(traj.knots)
-        subtraj = traj.subtrajectories[min(i, n)]
-        @test traj(t) == subtraj(t - traj.knots[min(i, n)])
+    n = length(subfunctions(traj))
+    for (i, t) in enumerate(breaks(traj))
+        subtraj = subfunctions(traj)[min(i, n)]
+        @test traj(t) == subtraj(t - breaks(traj)[min(i, n)])
         if i < n
-            tnext = traj.knots[i + 1]
+            tnext = breaks(traj)[i + 1]
             tmid = (t + tnext) / 2
             @test traj(tmid) == subtraj(tmid - t)
             @test traj(tmid, Val(2)) == subtraj(tmid - t, Val(2))
         end
     end
-    t0 = first(traj.knots)
-    tf = last(traj.knots)
+    t0 = first(breaks(traj))
+    tf = last(breaks(traj))
     if traj.clamp
         @test traj(t0 - 1) == traj(t0)
         @test traj(tf + 1) == traj(tf)
@@ -157,20 +157,20 @@ end
 @testset "Piecewise constant" begin
     n = 5
     subtrajectories = [Constant(i) for i = 1 : n]
-    knots = [i^2 - 1 for i = 1 : n + 1]
-    test_piecewise(Piecewise(subtrajectories, knots; clamp=true))
-    test_piecewise(Piecewise(subtrajectories, knots; clamp=false))
+    breaks = [i^2 - 1 for i = 1 : n + 1]
+    test_piecewise(Piecewise(subtrajectories, breaks; clamp=true))
+    test_piecewise(Piecewise(subtrajectories, breaks; clamp=false))
 end
 
 @testset "Piecewise interpolated" begin
     rng = MersenneTwister(1)
     n = 5
-    knots = [i^2 - 1 for i = 1 : n + 1]
-    subtrajectories = map(diff(knots)) do Δt
+    breaks = [i^2 - 1 for i = 1 : n + 1]
+    subtrajectories = map(diff(breaks)) do Δt
         Interpolated(0.0, Float64(Δt), rand(rng), rand(rng))
     end
-    test_piecewise(Piecewise(subtrajectories, knots; clamp=true))
-    test_piecewise(Piecewise(subtrajectories, knots; clamp=false))
+    test_piecewise(Piecewise(subtrajectories, breaks; clamp=true))
+    test_piecewise(Piecewise(subtrajectories, breaks; clamp=false))
 end
 
 @testset "Bezier evaluation" begin
