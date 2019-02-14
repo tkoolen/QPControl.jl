@@ -1,27 +1,30 @@
-struct Piecewise{T, K, TV<:AbstractVector{T}, KV<:AbstractVector{K}}
-    subtrajectories::TV
-    knots::KV
+struct Piecewise{T, B, VT<:AbstractVector{T}, VB<:AbstractVector{B}}
+    subfunctions::VT
+    breaks::VB
     clamp::Bool
 
-    function Piecewise(subtrajectories::TV, knots::KV; clamp::Bool=true) where {T, K, TV<:AbstractVector{T}, KV<:AbstractVector{K}}
-        @assert issorted(knots)
-        @assert length(knots) == length(subtrajectories) + 1
-        new{T, K, TV, KV}(subtrajectories, knots, clamp)
+    function Piecewise(subfunctions::VT, breaks::VB; clamp::Bool=true) where {T, B, VT<:AbstractVector{T}, VB<:AbstractVector{B}}
+        @assert issorted(breaks)
+        @assert length(breaks) == length(subfunctions) + 1
+        new{T, B, VT, VB}(subfunctions, breaks, clamp)
     end
 end
 
 function (traj::Piecewise)(x, args...)
-    knots = traj.knots
-    subtrajectories = traj.subtrajectories
-    x0, xf = first(knots), last(knots)
+    breaks = traj.breaks
+    subfunctions = traj.subfunctions
+    x0, xf = first(breaks), last(breaks)
     x′ = if traj.clamp
         clamp(x, x0, xf)
     else
         (x < x0 || x > xf) && throw_trajectory_domain_error(x, x0, xf)
         x
     end
-    index = min(searchsortedlast(knots, x′), length(subtrajectories))
-    @inbounds xknot = knots[index]
-    @inbounds subtraj = traj.subtrajectories[index]
+    index = min(searchsortedlast(breaks, x′), length(subfunctions))
+    @inbounds xknot = breaks[index]
+    @inbounds subtraj = traj.subfunctions[index]
     return subtraj(x′ - xknot, args...)
 end
+
+subfunctions(traj::Piecewise) = traj.subfunctions
+breaks(traj::Piecewise) = traj.breaks
