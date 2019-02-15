@@ -104,15 +104,15 @@ function addtask!(controller::MomentumBasedController, task::AbstractMotionTask)
     nothing
 end
 
-function addtask!(controller::MomentumBasedController, task::AbstractMotionTask, weight::Number)
+function addtask!(controller::MomentumBasedController, task::AbstractMotionTask, weight::Union{Number, Parameter{<:Number}})
     e = add_task_error_slack_variables!(controller, task)
     controller.objective = @expression controller.objective + weight * (e ⋅ e)
     e
 end
 
-function addtask!(controller::MomentumBasedController, task::AbstractMotionTask, weight::AbstractMatrix)
+function addtask!(controller::MomentumBasedController, task::AbstractMotionTask, weight::Union{AbstractMatrix, Parameter{<:AbstractMatrix}})
     e = add_task_error_slack_variables!(controller, task)
-    controller.objective = @expression controller.objective + e' * weight * e
+    controller.objective = @expression controller.objective + transpose(e) * weight * e
     e
 end
 

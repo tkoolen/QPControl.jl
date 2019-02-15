@@ -208,7 +208,15 @@ const MAX_NORMAL_FORCE_FIXME = 1e9
     end
 end
 
-@testset "spatial acceleration, constrained = $constrained" for constrained in [true, false]
+@enum TaskMode begin
+    CONSTRAINT
+    OBJECTIVE_TERM_SCALAR_WEIGHT
+    OBJECTIVE_TERM_SCALAR_WEIGHT_PARAMETER
+    OBJECTIVE_TERM_MATRIX_WEIGHT
+    OBJECTIVE_TERM_MATRIX_WEIGHT_PARAMETER
+end
+
+@testset "spatial acceleration, mode = $mode" for mode in instances(TaskMode)
     Random.seed!(533)
     val = Valkyrie()
     mechanism = val.mechanism
@@ -226,11 +234,21 @@ end
 
     result = DynamicsResult(mechanism)
     accels = result.accelerations
-    if constrained
+    if mode == CONSTRAINT
         addtask!(controller, task)
         regularize!.(Ref(controller), tree_joints(mechanism), 1.0)
-    else
+    elseif mode == OBJECTIVE_TERM_SCALAR_WEIGHT
         addtask!(controller, task, 1.0)
+    elseif mode == OBJECTIVE_TERM_SCALAR_WEIGHT_PARAMETER
+        weight = Parameter(controller.qpmodel, val=1.0)
+        addtask!(controller, task, weight)
+    elseif mode == OBJECTIVE_TERM_MATRIX_WEIGHT
+        addtask!(controller, task, Matrix(I, 6, 6))
+    elseif mode == OBJECTIVE_TERM_MATRIX_WEIGHT_PARAMETER
+        weight = Parameter(controller.qpmodel, val=Matrix(I, 6, 6))
+        addtask!(controller, task, weight)
+    else
+        error()
     end
     desiredaccel = rand(SpatialAcceleration{Float64}, default_frame(body), default_frame(base), frame)
     setdesired!(task, desiredaccel)
