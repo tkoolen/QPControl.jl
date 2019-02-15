@@ -196,4 +196,24 @@ end
     @test exponential_integral(b, c) ≈ exponential_integral(b, c, 1.0) atol=1e-10
 end
 
+@testset "SE(3)" begin
+    angular = let angle = π / 2, axis = SVector(1.0, 0.0, 0.0), y0 = one(Quat), yf = Quat(AngleAxis(angle, axis...))
+        Interpolated(0.0, 1.0, y0, yf)
+    end
+    linear = Interpolated(0.0, 1.0, SVector(0.0, 1.0, 2.0), SVector(2.0, 3.0, 4.0))
+    body = CartesianFrame3D()
+    base = CartesianFrame3D()
+    frame = CartesianFrame3D()
+    traj = SE3Trajectory(body, base, frame, angular, linear)
+    H, T, Td = traj(0.5, Val(2))
+    @test H.from == frame
+    @test H.to == base
+    @test T.body == body
+    @test T.base == base
+    @test T.frame == frame
+    @test Td.body == body
+    @test Td.base == base
+    @test Td.frame == frame
+end
+
 end

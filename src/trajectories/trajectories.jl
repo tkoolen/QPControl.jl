@@ -6,11 +6,13 @@ export
     Constant,
     Interpolated,
     Piecewise,
-    BezierCurve
+    BezierCurve,
+    SE3Trajectory
 
 using StaticUnivariatePolynomials
 using StaticArrays
 using Rotations
+using RigidBodyDynamics
 
 using Base: tail
 using StaticUnivariatePolynomials: constant, derivative
@@ -28,5 +30,6 @@ include("constant.jl")
 include("interpolated.jl")
 include("piecewise.jl")
 include("bezier.jl")
+include("se3.jl")
 
 end

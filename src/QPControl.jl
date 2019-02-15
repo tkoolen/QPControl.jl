@@ -19,15 +19,16 @@ export
     LinearMomentumRateTask,
     setdesired!
 
-# Low level
+# Low-level
 export
     MomentumBasedController,
+    SE3PDController,
     addtask!,
     addcontact!,
     regularize!,
     centroidal_frame
 
-# High level
+# High-level
 export
     StandingController
 
@@ -48,8 +49,9 @@ const RBD = RigidBodyDynamics
 include("contacts.jl")
 include("tasks.jl")
 include("exceptions.jl")
-include("lowlevel/momentum.jl")
-include("highlevel/standing.jl")
+include(joinpath("lowlevel", "momentum.jl"))
+include(joinpath("lowlevel", "se3pdcontroller.jl"))
+include(joinpath("highlevel", "standing.jl"))
 include(joinpath("trajectories", "trajectories.jl"))
 
 end # module
