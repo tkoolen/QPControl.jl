@@ -23,7 +23,9 @@ const SUP = StaticUnivariatePolynomials
     throw(DomainError(x, "Trajectory evaluated outside of range [$x0, $xf]"))
 end
 
-tangent_type(::Type{T}) where {T<:Number} = T
+zero_tangent(x::Number) = zero(x)
+zero_tangent(x::AbstractVector) = zero(x)
+zero_tangent(x::Rotation{3, T}) where {T} = zero(SVector{3, T})
 
 include("fit_polynomial.jl")
 include("constant.jl")
