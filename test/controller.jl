@@ -14,7 +14,9 @@
     trajectory = SE3Trajectory(default_frame(body), default_frame(base), frame, angular, linear)
     weight = Diagonal(vcat(zeros(3), fill(10.0, 3)))
     controller = SE3PDController(BodyID(base), BodyID(body), trajectory, weight, gains)
-    @show controller(0.5, state)
+    controller(0.5, state)
+
+    # FIXME: proper tests
 end
 
 @testset "parameterized contacts" begin

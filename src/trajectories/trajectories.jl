@@ -10,6 +10,7 @@ export
     SE3Trajectory
 
 using StaticUnivariatePolynomials
+using LinearAlgebra
 using StaticArrays
 using Rotations
 using RigidBodyDynamics
