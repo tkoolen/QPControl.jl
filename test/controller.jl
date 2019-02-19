@@ -11,7 +11,7 @@
     linear = Interpolated(0.0, 1.0, SVector(0.0, 1.0, 2.0), SVector(2.0, 3.0, 4.0))
     frame = default_frame(body)
     gains = SE3PDGains(FramePDGains(frame, PDGains(100.0, 20.0)), FramePDGains(frame, PDGains(1000.0, 200.0)))
-    trajectory = SE3Trajectory(default_frame(body), default_frame(base), frame, angular, linear)
+    trajectory = SE3Trajectory(default_frame(body), default_frame(base), angular, linear)
     weight = Diagonal(vcat(zeros(3), fill(10.0, 3)))
     controller = SE3PDController(BodyID(base), BodyID(body), trajectory, weight, gains)
     controller(0.5, state)
