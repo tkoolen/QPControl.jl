@@ -21,9 +21,9 @@ function (traj::Piecewise)(x, args...)
         x
     end
     index = min(searchsortedlast(breaks, x′), length(subfunctions))
-    @inbounds xknot = breaks[index]
+    @inbounds xbreak = breaks[index]
     @inbounds subtraj = traj.subfunctions[index]
-    return subtraj(x′ - xknot, args...)
+    return subtraj(x′ - xbreak, args...)
 end
 
 subfunctions(traj::Piecewise) = traj.subfunctions
