@@ -42,7 +42,7 @@ function defaultoptimizer()
     optimizer
 end
 
-# include("trajectories.jl")
+include("trajectories.jl")
 
 using QPControl.Trajectories
 using RigidBodyDynamics.PDControl

@@ -10,12 +10,11 @@ let
             lowercase(ext) == ".ipynb" || continue
             path = joinpath(root, file)
             @eval module $(gensym()) # Each notebook is run in its own module.
-            using Test
-            using NBInclude
-            @testset "Notebook: $($name)" begin
+                using Test
+                using NBInclude
+                println("Testing $($(name))")
                 # Note: use #NBSKIP in a cell to skip it during tests.
                 @nbinclude($path; regex = r"^((?!\#NBSKIP).)*$"s)
-            end
             end # module
         end
     end

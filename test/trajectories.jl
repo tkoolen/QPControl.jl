@@ -203,8 +203,8 @@ end
     linear = Interpolated(0.0, 1.0, SVector(0.0, 1.0, 2.0), SVector(2.0, 3.0, 4.0))
     body = CartesianFrame3D()
     base = CartesianFrame3D()
-    frame = CartesianFrame3D()
-    traj = SE3Trajectory(body, base, frame, angular, linear)
+    frame = body
+    traj = SE3Trajectory(body, base, angular, linear)
     H, T, Td = traj(0.5, Val(2))
     @test H.from == frame
     @test H.to == base
