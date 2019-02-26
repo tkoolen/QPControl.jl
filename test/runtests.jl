@@ -1,5 +1,9 @@
 module QPControlTests
 
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.instantiate()
+
 using Test
 using LinearAlgebra
 using Random

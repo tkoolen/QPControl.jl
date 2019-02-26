@@ -9,6 +9,7 @@ let
             name, ext = splitext(file)
             lowercase(ext) == ".ipynb" || continue
             path = joinpath(root, file)
+            Pkg.activate(@__DIR__)
             @eval module $(gensym()) # Each notebook is run in its own module.
                 using Test
                 using NBInclude
