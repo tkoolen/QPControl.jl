@@ -156,9 +156,9 @@ version = "0.10.3"
 
 [[StaticUnivariatePolynomials]]
 deps = ["Test"]
-git-tree-sha1 = "3be2f4c4bdb422f495b6e4fb5a67d094b42b12d3"
+git-tree-sha1 = "4975744d9400def12f6ad7f292c74c8a9511ace2"
 uuid = "6f584044-cad5-5b68-a429-1e244a824f76"
-version = "0.3.0"
+version = "0.4.0"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]

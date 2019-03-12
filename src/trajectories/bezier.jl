@@ -1,13 +1,23 @@
-struct BezierCurve{N, T}
+
+struct BezierCurve{N, T} <: SUP.AbstractPolynomial{N, T}
     points::NTuple{N, T}
 end
-
-using StaticUnivariatePolynomials: _map
 
 BezierCurve(coeffs::Tuple) = BezierCurve(promote(coeffs...))
 BezierCurve(coeffs...) = BezierCurve(coeffs)
 
-@inline StaticUnivariatePolynomials.constant(b::BezierCurve) = b.points[1]
+# Conversion to monomial basis
+Polynomial(b::BezierCurve{1}) = Polynomial(b.points)
+function Polynomial(b::BezierCurve{N, T}) where {N, T}
+    # b(t) = (1 - t) * b1(t) + t * b2(t)
+    #      = b1(t) + t * (b2(t) - b1(t))
+    b1 = BezierCurve(reverse(tail(reverse(b.points))))
+    b2 = BezierCurve(tail(b.points))
+    Polynomial(b1) + Polynomial(0, 1) * Polynomial(b2 - b1)
+end
+
+# Utility
+@inline SUP.constant(b::BezierCurve) = b.points[1]
 
 @inline (b::BezierCurve{1})(t) = constant(b)
 @inline function (b::BezierCurve)(t)
@@ -18,7 +28,7 @@ end
 
 for op in [:+, :-]
     @eval begin
-        # BezierCurves
+        # Two BezierCurves
         Base.$op(b1::BezierCurve{N}, b2::BezierCurve{N}) where {N} = BezierCurve(_map($op, b1.points, b2.points))
 
         # BezierCurves and constant
@@ -27,35 +37,20 @@ for op in [:+, :-]
     end
 end
 
-@inline function StaticUnivariatePolynomials.derivative(b::BezierCurve{N}) where {N}
+@inline function SUP.derivative(b::BezierCurve{N}) where {N}
     # https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/Bezier/bezier-der.html
     points = b.points
     n = N - 1
     BezierCurve(ntuple(i -> n * (points[i + 1] - points[i]), n))
 end
 
-"""
-```math
-\\int_{0}^{t} b\\left(\\tau\\right) e^{c \\tau} d\\tau
-```
-
-Found using integration by parts.
-"""
-@inline function exponential_integral(b::BezierCurve{N}, c, t; inv_c = inv(c), exp_c_t=exp(c * t)) where N
-    # TODO: move to StaticUnivariatePolynomials?
-    if N === 1
-        return inv_c * constant(b) * (exp_c_t - 1)
-    else
-        return inv_c * (b(t) * exp_c_t - constant(b) - exponential_integral(derivative(b), c, t; inv_c=inv_c, exp_c_t=exp_c_t))
-    end
-end
 
 """
 ```math
 \\int_{0}^{1} b\\left(\\tau\\right) e^{c \\tau} d\\tau
 ```
 """
-@inline function exponential_integral(b::BezierCurve{N}, c; inv_c=inv(c), exp_c=exp(c)) where N
+@inline function SUP.exponential_integral(b::BezierCurve{N}, c; inv_c=inv(c), exp_c=exp(c)) where N
     pn = b.points[N]
     if N === 1
         return inv_c * constant(b) * (exp_c - 1)

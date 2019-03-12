@@ -16,7 +16,7 @@ using Rotations
 using RigidBodyDynamics
 
 using Base: tail
-using StaticUnivariatePolynomials: constant, derivative
+using StaticUnivariatePolynomials: constant, derivative, exponential_integral, _map
 
 const SUP = StaticUnivariatePolynomials
 
