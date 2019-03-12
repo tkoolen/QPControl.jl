@@ -2,6 +2,8 @@ struct BezierCurve{N, T}
     points::NTuple{N, T}
 end
 
+using StaticUnivariatePolynomials: _map
+
 BezierCurve(coeffs::Tuple) = BezierCurve(promote(coeffs...))
 BezierCurve(coeffs...) = BezierCurve(coeffs)
 
@@ -14,6 +16,16 @@ BezierCurve(coeffs...) = BezierCurve(coeffs)
     (oneunit(t) - t) * b1(t) + t * b2(t)
 end
 
+for op in [:+, :-]
+    @eval begin
+        # BezierCurves
+        Base.$op(b1::BezierCurve{N}, b2::BezierCurve{N}) where {N} = BezierCurve(_map($op, b1.points, b2.points))
+
+        # BezierCurves and constant
+        Base.$op(b::BezierCurve, c) = BezierCurve(_map(p -> $op(p, c), b.points))
+        Base.$op(c, b::BezierCurve) = BezierCurve(_map(p -> $op(c, p), b.points))
+    end
+end
 
 @inline function StaticUnivariatePolynomials.derivative(b::BezierCurve{N}) where {N}
     # https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/Bezier/bezier-der.html

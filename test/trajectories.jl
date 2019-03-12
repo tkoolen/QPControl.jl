@@ -196,6 +196,23 @@ end
     @test exponential_integral(b, c) ≈ exponential_integral(b, c, 1.0) atol=1e-10
 end
 
+@testset "Bezier arithmetic" begin
+    b = BezierCurve(1, 2, 3, 4)
+    c = 5
+    for t in range(0., 1., length=10)
+        @test (b + c)(t) ≈ b(t) + c
+        @test (b - c)(t) ≈ b(t) - c
+        @test (c + b)(t) ≈ c + b(t)
+        @test (c - b)(t) ≈ c - b(t)
+    end
+    b1 = BezierCurve(1, 2, 3, 4)
+    b2 = BezierCurve(2, 3, 4, 5)
+    for t in range(0., 1., length=10)
+        @test (b1 + b2)(t) ≈ b1(t) + b2(t)
+        @test (b1 - b2)(t) ≈ b1(t) - b2(t)
+    end
+end
+
 @testset "SE(3)" begin
     angular = let angle = π / 2, axis = SVector(1.0, 0.0, 0.0), y0 = one(Quat), yf = Quat(AngleAxis(angle, axis...))
         Interpolated(0.0, 1.0, y0, yf)
