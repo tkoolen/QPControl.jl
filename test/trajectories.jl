@@ -214,6 +214,21 @@ end
     end
 end
 
+@testset "Bezier scaling" begin
+    b1 = BezierCurve(2, 3, 4)
+    @test b1 * 4 === 4 * b1 === BezierCurve(8, 12, 16)
+    @test b1 / 2 === BezierCurve(2 / 2, 3 / 2, 4 / 2)
+    for t in range(0., 1., length=10)
+        @test (b1 * 4)(t) ≈ b1(t) * 4
+        @test (b1 / 2)(t) ≈ b1(t) / 2
+    end
+    b2 = BezierCurve(ntuple(i -> 21 - i, Val(20)))
+    allocs = let b2 = b2
+        @allocated b2 * 4
+    end
+    @test allocs == 0
+end
+
 @testset "Bezier to Polynomial" begin
     b = BezierCurve(5, 4, 3, 2, 1, 10)
     p = Polynomial(b)
