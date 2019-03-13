@@ -10,7 +10,8 @@ using StaticArrays
 using StaticUnivariatePolynomials
 using ForwardDiff
 
-using QPControl.Trajectories: exponential_integral, subfunctions, breaks
+using QPControl.Trajectories: subfunctions, breaks
+using StaticUnivariatePolynomials: exponential_integral
 
 const SUP = StaticUnivariatePolynomials
 
@@ -211,6 +212,18 @@ end
         @test (b1 + b2)(t) ≈ b1(t) + b2(t)
         @test (b1 - b2)(t) ≈ b1(t) - b2(t)
     end
+end
+
+@testset "Bezier to Polynomial" begin
+    b = BezierCurve(5, 4, 3, 2, 1, 10)
+    p = Polynomial(b)
+    for t in range(0., 1., length=10)
+        @test b(t) ≈ p(t)
+    end
+    allocs = let b = b
+        @allocated Polynomial(b)
+    end
+    @test allocs == 0
 end
 
 @testset "SE(3)" begin
