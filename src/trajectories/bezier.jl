@@ -38,9 +38,9 @@ for op in [:+, :-]
 end
 
 for op in [:*, :/]
-    @eval Base.$op(b::BezierCurve, c::Number) = BezierCurve(_map(x -> $op(x, c), b.points))
+    @eval Base.$op(b::BezierCurve, c) = BezierCurve(_map(x -> $op(x, c), b.points))
 end
-Base.:*(c::Number, b::BezierCurve) = BezierCurve(_map(x -> c * x, b.points))
+Base.:*(c, b::BezierCurve) = BezierCurve(_map(x -> c * x, b.points))
 
 @inline function SUP.derivative(b::BezierCurve{N}) where {N}
     # https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/Bezier/bezier-der.html
