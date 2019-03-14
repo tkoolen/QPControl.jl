@@ -1,6 +1,7 @@
 name = "QPControl"
 uuid = "d1d18edd-2826-5709-814b-0b0c7d0d034b"
 authors = ["Twan Koolen <koolen.twan@gmail.com>", "Robin Deits <robin.deits@gmail.com>"]
+version = "0.1.0"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

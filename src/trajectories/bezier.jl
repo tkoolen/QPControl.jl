@@ -18,6 +18,8 @@ end
 
 # Utility
 @inline SUP.constant(b::BezierCurve) = b.points[1]
+Base.zero(::Type{BezierCurve{N, T}}) where {N, T} = BezierCurve(ntuple(_ -> zero(T), Val(N)))
+Base.zero(b::BezierCurve) = zero(typeof(b))
 
 @inline (b::BezierCurve{1})(t) = constant(b)
 @inline function (b::BezierCurve)(t)

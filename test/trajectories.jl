@@ -180,6 +180,12 @@ end
     @test b(1) === 4
 end
 
+@testset "Bezier utility" begin
+    b = BezierCurve(1, 2, 3, 4)
+    @test zero(b) === zero(typeof(b)) === BezierCurve(0, 0, 0, 0)
+    @test SUP.constant(b) == 1
+end
+
 @testset "Bezier derivative" begin
     b = BezierCurve(1, 2, 3, 4)
     b′ = SUP.derivative(b)
