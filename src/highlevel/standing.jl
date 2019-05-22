@@ -13,6 +13,9 @@ struct StandingController{M<:MomentumBasedController}
 
     comref::Point3D{SVector{3, Float64}}
     jointrefs::Dict{JointID, Float64}
+
+    dts::Vector{Float64}
+    iters::Vector{Int}
 end
 
 function StandingController(
@@ -48,14 +51,22 @@ function StandingController(
     jointtasks = Dict(JointID(j) => JointAccelerationTask(j) for j in positioncontroljoints)
     addtask!.(Ref(lowlevel), collect(values(jointtasks)))
 
+    dts = Float64[]
+    sizehint!(dts, 10_000)
+
+    iters = Int[]
+    sizehint!(iters, 10_000)
+
     StandingController(
         lowlevel, m,
         foottasks, linmomtask, pelvistask, jointtasks,
         comgains, pelvisgains, jointgains,
-        comref, jointrefs)
+        comref, jointrefs, dts, iters)
 end
 
 function (controller::StandingController)(τ::AbstractVector, t::Number, state::MechanismState)
+    t0 = time()
+
     # Linear momentum control
     m = controller.robotmass
     c = center_of_mass(state)
@@ -85,5 +96,12 @@ function (controller::StandingController)(τ::AbstractVector, t::Number, state::
     end
 
     controller.lowlevel(τ, t, state)
+
+    dt = time() - t0
+    if length(controller.dts) <= 10_000
+        push!(controller.dts, dt)
+        push!(controller.iters, controller.lowlevel.qpmodel.optimizer.results.info.iter)
+    end
+
     τ
 end
