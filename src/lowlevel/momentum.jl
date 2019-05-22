@@ -81,9 +81,9 @@ function (controller::MomentumBasedController)(τ::AbstractVector, t::Number, x:
 end
 
 function checkstatus(qpmodel::Parametron.Model)
-    ok = terminationstatus(qpmodel) == MOI.Success && primalstatus(qpmodel) == MOI.FeasiblePoint
+    ok = terminationstatus(qpmodel) == MOI.OPTIMAL && primalstatus(qpmodel) == MOI.FEASIBLE_POINT
     if !ok
-        okish = terminationstatus(qpmodel) == MOI.AlmostSuccess && primalstatus(qpmodel) == MOI.UnknownResultStatus
+        okish = terminationstatus(qpmodel) == MOI.ALMOST_OPTIMAL && primalstatus(qpmodel) == MOI.UNKNOWN_RESULT_STATUS
         if !okish
             throw(QPSolveFailure(terminationstatus(qpmodel), primalstatus(qpmodel), dualstatus(qpmodel)))
         end
