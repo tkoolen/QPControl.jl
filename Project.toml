@@ -12,6 +12,9 @@ Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StaticUnivariatePolynomials = "6f584044-cad5-5b68-a429-1e244a824f76"
 
+[compat]
+StaticUnivariatePolynomials = "≥ 0.6.0"
+
 [extras]
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
