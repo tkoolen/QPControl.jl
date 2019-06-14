@@ -20,6 +20,8 @@ using StaticUnivariatePolynomials: constant, derivative, exponential_integral, _
 
 const SUP = StaticUnivariatePolynomials
 
+const BezierCurve = BernsteinPolynomial
+
 @noinline function throw_trajectory_domain_error(x, x0, xf)
     throw(DomainError(x, "Trajectory evaluated outside of range [$x0, $xf]"))
 end
@@ -32,7 +34,6 @@ include("fit_polynomial.jl")
 include("constant.jl")
 include("interpolated.jl")
 include("piecewise.jl")
-include("bezier.jl")
 include("se3.jl")
 
 end
