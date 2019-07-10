@@ -174,6 +174,28 @@ end
     test_piecewise(Piecewise(subtrajectories, breaks; clamp=false))
 end
 
+@testset "PointTrajectory" begin
+    rng = MersenneTwister(2)
+    interpolator = fit_cubic(x0=0.0, xf=1.0,
+        y0=rand(rng), yd0=rand(rng), yf=rand(rng), ydf=rand(rng))
+    x0 = -1.0
+    xf = 2.0
+    y0 = rand(rng, SVector{3})
+    yf = rand(rng, SVector{3})
+    interpolated = Interpolated(x0, xf, y0, yf, interpolator, min_num_derivs=Val(2))
+    frame = CartesianFrame3D()
+    traj = PointTrajectory(frame, interpolated)
+    t = 1.0
+    @test traj(t) === Point3D(frame, interpolated(t))
+    point, vel, accel = traj(t, Val(2))
+    @test vel === FreeVector3D(frame, interpolated(t, Val(2))[2])
+    @test accel === FreeVector3D(frame, interpolated(t, Val(2))[3])
+    allocs = let traj=traj, t=t
+        @allocated traj(t, Val{2}())
+    end
+    @test allocs == 0
+end
+
 @testset "SE(3)" begin
     angular = let angle = π / 2, axis = SVector(1.0, 0.0, 0.0), y0 = one(Quat), yf = Quat(AngleAxis(angle, axis...))
         Interpolated(0.0, 1.0, y0, yf)

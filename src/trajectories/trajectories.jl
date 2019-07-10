@@ -7,6 +7,7 @@ export
     Interpolated,
     Piecewise,
     BezierCurve,
+    PointTrajectory,
     SE3Trajectory
 
 using StaticUnivariatePolynomials
@@ -34,6 +35,7 @@ include("fit_polynomial.jl")
 include("constant.jl")
 include("interpolated.jl")
 include("piecewise.jl")
+include("point.jl")
 include("se3.jl")
 
 end
