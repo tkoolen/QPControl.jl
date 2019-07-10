@@ -37,11 +37,15 @@ function (trajectory::Interpolated)(x, ::Val{num_derivs}) where num_derivs
     end
 
     # 2. Warp θ using interpolator to obtain α(θ(x)) and its partial derivatives w.r.t θ.
-    α, α_θ_derivs = trajectory.interpolator(θ, Val(num_derivs))
+    α, α_θ_derivs = let α_vals = trajectory.interpolator(θ, Val(num_derivs))
+        α_vals[1], Base.tail(α_vals)
+    end
 
     # 3. Compute derivatives of α w.r.t x using higher-order chain rule,
     # where higher order derivatives of θ w.r.t. x are zero.
-    α_x_derivs = ntuple(i -> α_θ_derivs[i] * dθdx^i, Val(num_derivs))
+    α_x_derivs = let α_θ_derivs=α_θ_derivs, dθdx=dθdx
+        ntuple(i -> α_θ_derivs[i] * dθdx^i, Val(num_derivs))
+    end
 
     # 3. Interpolate between y0 and yf using α.
     y0, yf = trajectory.y0, trajectory.yf
@@ -83,22 +87,22 @@ end
 function make_interpolator(f, ::Val)
     function (θ, ::Val{num_derivs}) where {num_derivs}
         # Default to calling the `nthderiv` function
-        f(θ), ntuple(n -> nthderiv(f, θ, n), Val(num_derivs))
+        f(θ), ntuple(n -> nthderiv(f, θ, n), Val(num_derivs))...
     end
 end
 
 function make_interpolator(p::Polynomial, ::Val{min_num_derivs}) where min_num_derivs
-    PolynomialInterpolator(p, Val(min_num_derivs))
+    PolyDerivEvaluator(p, Val(min_num_derivs))
 end
 
-# PolynomialInterpolator; used to compute the derivatives once instead of every call
-struct PolynomialInterpolator{F, D<:Tuple{Vararg{Polynomial}}}
+# PolyDerivEvaluator; used to compute the derivatives once instead of every call
+struct PolyDerivEvaluator{F, D<:Tuple{Vararg{Polynomial}}}
     f::F
     derivs::D
 end
 
-@inline function PolynomialInterpolator(p::Polynomial, ::Val{num_derivs}) where num_derivs
-    PolynomialInterpolator(p, make_poly_derivs(p, Val(num_derivs)))
+@inline function PolyDerivEvaluator(p::Polynomial, ::Val{num_derivs}) where num_derivs
+    PolyDerivEvaluator(p, make_poly_derivs(p, Val(num_derivs)))
 end
 
 make_poly_derivs(p::Polynomial, ::Val{0}) = ()
@@ -107,8 +111,13 @@ make_poly_derivs(p::Polynomial, ::Val{0}) = ()
     (p′, make_poly_derivs(p′, Val(num_derivs - 1))...)
 end
 
-function (interp::PolynomialInterpolator)(θ, ::Val{num_derivs}) where num_derivs
-    interp.f(θ), ntuple(i -> interp.derivs[i](θ), Val(num_derivs))
+@generated function (pde::PolyDerivEvaluator)(θ, ::Val{num_derivs}) where num_derivs
+    num_derivs >= 0 || return :(throw(ArgumentError("num_derivs must be nonnegative")))
+    exprs = [:(pde.f(θ))]
+    for i = 1 : num_derivs
+        push!(exprs, :(pde.derivs[$i](θ)))
+    end
+    return :(tuple($(exprs...)))
 end
 
 # `nthderiv` overloads
