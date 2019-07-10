@@ -174,7 +174,7 @@ end
     test_piecewise(Piecewise(subtrajectories, breaks; clamp=false))
 end
 
-@testset "PointTrajectory" begin
+@testset "PointTrajectory, FreeVectorTrajectory" begin
     rng = MersenneTwister(2)
     interpolator = fit_cubic(x0=0.0, xf=1.0,
         y0=rand(rng), yd0=rand(rng), yf=rand(rng), ydf=rand(rng))
@@ -184,16 +184,29 @@ end
     yf = rand(rng, SVector{3})
     interpolated = Interpolated(x0, xf, y0, yf, interpolator, min_num_derivs=Val(2))
     frame = CartesianFrame3D()
-    traj = PointTrajectory(frame, interpolated)
     t = 1.0
-    @test traj(t) === Point3D(frame, interpolated(t))
-    point, vel, accel = traj(t, Val(2))
-    @test vel === FreeVector3D(frame, interpolated(t, Val(2))[2])
-    @test accel === FreeVector3D(frame, interpolated(t, Val(2))[3])
-    allocs = let traj=traj, t=t
-        @allocated traj(t, Val{2}())
+    let
+        traj = PointTrajectory(frame, interpolated)
+        @test traj(t) === Point3D(frame, interpolated(t))
+        point, vel, accel = traj(t, Val(2))
+        @test vel === FreeVector3D(frame, interpolated(t, Val(2))[2])
+        @test accel === FreeVector3D(frame, interpolated(t, Val(2))[3])
+        allocs = let traj=traj, t=t
+            @allocated traj(t, Val(2))
+        end
+        @test allocs == 0
     end
-    @test allocs == 0
+    let
+        traj = FreeVectorTrajectory(frame, interpolated)
+        @test traj(t) === FreeVector3D(frame, interpolated(t))
+        x, xd, xdd = traj(t, Val(2))
+        @test xd === FreeVector3D(frame, interpolated(t, Val(2))[2])
+        @test xdd === FreeVector3D(frame, interpolated(t, Val(2))[3])
+        allocs = let traj=traj, t=t
+            @allocated traj(t, Val(2))
+        end
+        @test allocs == 0
+    end
 end
 
 @testset "SE(3)" begin
