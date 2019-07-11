@@ -9,7 +9,8 @@ export
     BezierCurve,
     PointTrajectory,
     FreeVectorTrajectory,
-    SE3Trajectory
+    SE3Trajectory,
+    PolyDerivEvaluator
 
 using StaticUnivariatePolynomials
 using LinearAlgebra
@@ -34,6 +35,7 @@ zero_tangent(x::Rotation{3, T}) where {T} = zero(SVector{3, T})
 
 include("fit_polynomial.jl")
 include("constant.jl")
+include("poly_deriv_evaluator.jl")
 include("interpolated.jl")
 include("piecewise.jl")
 include("point_vector.jl")
